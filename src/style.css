@@ -1,0 +1,45 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  line-height: 1.5;
+}
+
+#app {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.shell {
+  max-width: 36rem;
+}
+
+h1 {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.lede {
+  margin: 0 0 1rem;
+  color: #cbd5e1;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #94a3b8;
+}
