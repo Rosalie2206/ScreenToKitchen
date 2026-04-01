@@ -1,0 +1,82 @@
+# How ScreenToKitchen Works
+
+This note is for anyone who wants a friendly overview of what the app does and how the technical pieces fit together—without assuming you write code for a living.
+
+---
+
+## What the app does (in one breath)
+
+You take a **photo of a recipe** (from a book, a screen, or a printout). The app **reads the text** from the image, **turns it into a structured recipe** (title, ingredients, steps), lets you **save** it, and **browse** saved recipes in a **catalogue**. You can also **install** the site on your phone like a small app (a “Progressive Web App”).
+
+---
+
+## Where it runs
+
+- The **interface** you tap and type in is a **website** built with modern web technology. It is designed to be hosted on **GitHub Pages** (free static hosting), which means there is no traditional “app store” install—you open it in the browser.
+- Optional: a **server** piece can run on **Vercel** for advanced recipe cleanup using artificial intelligence. That part is separate from the simple “works entirely in the browser” path (see below).
+
+---
+
+## The journey of your photo
+
+### 1. Choosing a photo
+
+When you pick an image, the app keeps it **on your device** in the browser’s memory. It does not upload the picture to a company server **unless** you later use a feature that explicitly calls a server (such as the optional AI recipe endpoint).
+
+### 2. The “Converter” screen
+
+After you choose a photo, you go to a screen called **Converter**. Here two things can happen:
+
+**A) Reading the text (OCR)**  
+“**OCR**” means *optical character recognition*—the computer tries to read letters and numbers from the picture, like copying text off a photo. This runs **inside your browser** using a library called **Tesseract**. The first time, it may download a small language pack (similar to a dictionary) so it can recognize English text.
+
+**B) Turning text into a recipe**  
+Raw OCR output is often messy: broken lines, extra words from the magazine margin, page numbers, or ads. The app includes **rules** (small programs that run on your phone or computer) to:
+
+- Drop obvious junk (URLs, “subscribe here”, stray symbols).
+- Guess where the real recipe starts and ends.
+- Split content into **ingredients** and **steps** when it can.
+
+There is also an optional **cloud** step: a **serverless** function can send that text to **OpenAI** and ask for a cleaner, structured recipe. Your **API key** for that service stays on the server—never in the app people download—so your key is not exposed in the public website code.
+
+### 3. Saving and the catalogue
+
+When you tap **Save**, the structured recipe is stored in **session storage**—think of it as a scratchpad inside your browser for this browsing session. Saved items appear in the **Catalogue**, with links to open each recipe again. If you clear site data or use another device, those saved recipes won’t be there unless you add accounts or cloud sync later (the current design is simple and local).
+
+### 4. Moving between “pages” without reloading
+
+The app uses **hash routing** (the part of the address after `#`). That keeps navigation smooth and works well on **GitHub Pages**, which only serves static files and doesn’t run a custom server for every URL.
+
+---
+
+## Words you might see in technical discussions
+
+| Term | Plain meaning |
+|------|----------------|
+| **Frontend** | Everything that runs in your browser: buttons, screens, OCR, saving in session storage. |
+| **Backend / API** | A small program in the cloud that can talk to OpenAI safely; you **POST** text, it returns JSON. |
+| **Serverless** | The cloud runs the API only when someone calls it—no server you manage 24/7. |
+| **PWA** | The site can be “installed” and feel more like an app; offline behavior depends on how it’s configured. |
+| **JSON** | A standard way to send structured data (recipe fields) between the browser and the server. |
+| **Environment variable** | A secret setting on the server (like `OPENAI_API_KEY`)—not baked into public web files. |
+
+---
+
+## Why some things are designed this way
+
+- **GitHub Pages** is great for a free, simple site but only serves **static** files. Hash URLs and client-side logic avoid needing special server configuration for every page.
+- **Tesseract in the browser** avoids sending your photos to a server just to read text—privacy-friendly for the basic flow.
+- **OpenAI behind a Vercel function** keeps the **secret key** off the public internet; only your server-side code can use it.
+
+---
+
+## If you want to go deeper
+
+Developers on the project will look at folders such as:
+
+- **`src/`** — user interface and browser logic  
+- **`api/`** — Vercel function for the optional AI recipe endpoint  
+- **`lib/llm/`** — shared parsing and types for structured recipes  
+- **`documentation/`** — notes like this one  
+
+That’s enough to orient a curious non-developer to how ScreenToKitchen fits together technically—without needing to read the code line by line.

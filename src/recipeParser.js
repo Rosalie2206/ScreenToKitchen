@@ -2,6 +2,116 @@
  * Turn raw OCR text into a structured recipe (client-side heuristics).
  */
 
+/** Lines that are very unlikely to be part of a recipe (ads, URLs, page chrome). */
+function isNoiseLine(line) {
+  const t = line.trim();
+  if (t.length === 0) return true;
+  if (t.length === 1 && !/[a-z]/i.test(t)) return true;
+
+  // Page numbers & issue chrome
+  if (/^\d{1,4}$/.test(t)) return true;
+  if (/^(page|pg\.?)\s*\d+/i.test(t)) return true;
+  if (/^(vol\.?|volume|issue|no\.?)\s*\d+/i.test(t)) return true;
+  if (/^\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{2,4}$/.test(t)) return true;
+
+  // URLs, email, social
+  if (/https?:\/\/|www\.|\.com\/|\.org\/|\.net\//i.test(t)) return true;
+  if (/\b@\w+\.(com|net|org)\b/i.test(t)) return true;
+  if (/^@\w+/.test(t)) return true;
+  if (/\bfacebook\.|instagram\.|twitter\.|pinterest\.|tiktok\./i.test(t)) return true;
+
+  // Legal / promo / magazine fluff
+  if (/©|&copy;|\ball rights reserved\b|reprinted (with|from)|permission of/i.test(t))
+    return true;
+  if (/\b(subscribe|unsubscribe|newsletter|click here|visit our|scan (this )?qr)\b/i.test(t))
+    return true;
+  if (/\b(advertisement|advertorial|sponsored)\b/i.test(t)) return true;
+
+  // OCR junk (mostly symbols / gibberish)
+  const letters = (t.match(/[a-z]/gi) || []).length;
+  if (t.length > 8 && letters / t.length < 0.35) return true;
+
+  // Standalone prices / SKU-like
+  if (/^\$[\d.,]+\s*$/.test(t)) return true;
+
+  // Photo credits (often under recipe)
+  if (/^(photo|photography|image)\s*:/i.test(t)) return true;
+
+  return false;
+}
+
+function isWeakTailLine(line) {
+  const t = line.trim();
+  if (isNoiseLine(t)) return true;
+  if (/^(source|credit|styling|props)\s*:/i.test(t)) return true;
+  if (t.length < 50 && /\b(per serving|nutrition|calories|ww\.)\b/i.test(t)) return true;
+  return false;
+}
+
+function dedupeConsecutive(lines) {
+  const out = [];
+  let prev = null;
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    if (prev !== null && t.toLowerCase() === prev.toLowerCase()) continue;
+    out.push(t);
+    prev = t.toLowerCase();
+  }
+  return out;
+}
+
+function pickTitleFromPreamble(preamble) {
+  if (!preamble.length) return "";
+  const monthRe =
+    /^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{0,4}$/i;
+  for (let i = preamble.length - 1; i >= 0; i--) {
+    const l = preamble[i];
+    if (l.length > 85) continue;
+    if (/^20\d{2}$/.test(l)) continue;
+    if (monthRe.test(l)) continue;
+    if (isNoiseLine(l)) continue;
+    return l;
+  }
+  const first = preamble.find((l) => l.length < 90 && !isNoiseLine(l));
+  return first || "";
+}
+
+/**
+ * Remove OCR noise and isolate the block that most likely contains the recipe.
+ */
+export function cleanOcrTextForRecipe(raw) {
+  const normalized = raw.replace(/\r\n/g, "\n").replace(/\u00a0/g, " ");
+  const lines = normalized
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const filtered = dedupeConsecutive(lines.filter((l) => !isNoiseLine(l)));
+  if (!filtered.length) return "";
+
+  let start = 0;
+  for (let i = 0; i < filtered.length; i++) {
+    if (strongRecipeSignal(filtered[i])) {
+      start = i;
+      break;
+    }
+  }
+
+  let end = filtered.length - 1;
+  while (end > start && isWeakTailLine(filtered[end])) end--;
+
+  const preamble = filtered.slice(0, start);
+  const core = filtered.slice(start, end + 1);
+  if (!core.length) return filtered.join("\n");
+
+  const titleFromPreamble = pickTitleFromPreamble(preamble);
+  if (titleFromPreamble && !core.some((l) => l === titleFromPreamble)) {
+    return [titleFromPreamble, ...core].join("\n");
+  }
+  return core.join("\n");
+}
+
 const ING_HEADER =
   /^(ingredients?|what you need|you will need|shopping list)\s*:?\s*$/i;
 const DIR_HEADER =
@@ -37,6 +147,18 @@ function classifyHeader(line) {
   if (DIR_HEADER.test(line)) return "directions";
   if (NOTES_HEADER.test(line)) return "notes";
   return null;
+}
+
+function strongRecipeSignal(line) {
+  const t = line.trim();
+  if (classifyHeader(t)) return true;
+  if (looksLikeIngredientLine(t)) return true;
+  if (looksLikeStepLine(t)) return true;
+  if (/\b(serves?|yield|prep( time)?|cook( time)?|total time)\b\s*[:.]?\s*\d/i.test(t))
+    return true;
+  if (/\b(preheat|bake|mix|stir|whisk|fold|simmer|boil|sauté|saute|chop|dice|slice|drain|season)\b/i.test(t))
+    return true;
+  return false;
 }
 
 function takeTitleLines(lines, upTo) {
@@ -217,10 +339,34 @@ function parseWithSectionHeaders(lines) {
   };
 }
 
+function sanitizeRecipe(recipe) {
+  let title = (recipe.title || "").trim() || "Recipe";
+  if (isNoiseLine(title) || title.length > 140) title = "Recipe";
+
+  return {
+    title,
+    ingredients: (recipe.ingredients || []).filter((x) => x && !isNoiseLine(x)),
+    steps: (recipe.steps || []).filter((x) => x && !isNoiseLine(x)),
+    notes: (recipe.notes || []).filter((x) => x && !isNoiseLine(x)),
+  };
+}
+
 export function parseRecipeFromText(raw) {
-  const normalized = raw.replace(/\r\n/g, "\n").trim();
+  let cleaned = cleanOcrTextForRecipe(raw);
+  if (!cleaned.trim()) {
+    const fallbackLines = dedupeConsecutive(
+      raw
+        .replace(/\r\n/g, "\n")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0 && !isNoiseLine(l)),
+    );
+    cleaned = fallbackLines.join("\n");
+  }
+
+  const normalized = cleaned.replace(/\r\n/g, "\n").trim();
   if (!normalized) {
-    return { title: "Recipe", ingredients: [], steps: [], notes: [] };
+    return sanitizeRecipe({ title: "Recipe", ingredients: [], steps: [], notes: [] });
   }
 
   const lines = normalized
@@ -229,20 +375,20 @@ export function parseRecipeFromText(raw) {
     .filter((l) => l.length > 0);
 
   if (!lines.length) {
-    return { title: "Recipe", ingredients: [], steps: [], notes: [] };
+    return sanitizeRecipe({ title: "Recipe", ingredients: [], steps: [], notes: [] });
   }
 
   const structured = parseWithSectionHeaders(lines);
   if (structured && (structured.ingredients.length || structured.steps.length)) {
-    return {
+    return sanitizeRecipe({
       title: structured.title,
       ingredients: structured.ingredients,
       steps: structured.steps,
       notes: structured.notes,
-    };
+    });
   }
 
-  return heuristicSplit(lines);
+  return sanitizeRecipe(heuristicSplit(lines));
 }
 
 export function escapeHtml(text) {
