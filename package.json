@@ -18,6 +18,7 @@
     "vite": "^6.2.0"
   },
   "dependencies": {
+    "marked": "^17.0.5",
     "openai": "^4.77.0",
     "tesseract.js": "^7.0.0",
     "zod": "^3.24.0"

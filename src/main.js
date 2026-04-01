@@ -1,4 +1,6 @@
 import "./style.css";
+import { marked } from "marked";
+import dummyMarkdown from "../documentation/dummy?raw";
 import {
   buildRecipeCardHtml,
   escapeHtml,
@@ -31,6 +33,7 @@ function parseRoute() {
   const parts = raw.split("/").filter(Boolean);
   if (parts[0] === "converter") return { name: "converter" };
   if (parts[0] === "catalogue") return { name: "catalogue" };
+  if (parts[0] === "behind-the-scenes") return { name: "behind" };
   if (parts[0] === "recipe") {
     return { name: "recipe", recipeId: parts[1] ?? null };
   }
@@ -93,7 +96,12 @@ function renderHome() {
     <main class="shell">
       <h1>ScreenToKitchen</h1>
       <p class="lede">This is a Progressive Web App. Install it from the browser menu for an app-like experience.</p>
-      <p class="home-nav"><a class="home-nav__link" href="#/catalogue">Catalogue</a></p>
+      <p class="home-nav">
+        <a class="home-nav__link" href="#/catalogue">Catalogue</a>
+      </p>
+      <p class="home-actions">
+        <a class="home-behind-btn" href="#/behind-the-scenes">Behind the scenes</a>
+      </p>
 
       <section class="upload" aria-label="Upload a picture">
         <h2 class="upload-heading">Picture</h2>
@@ -297,12 +305,34 @@ function renderRecipePage(recipeId) {
   `;
 }
 
+/** Strip the doc’s top-level # title so the page heading stays unique. */
+function prepareBehindTheScenesMarkdown(raw) {
+  return raw.replace(/^#\s+[^\n]+\n+/, "").trim();
+}
+
+function renderBehindTheScenes() {
+  document.title = "Behind the scenes · ScreenToKitchen";
+  const html = marked.parse(prepareBehindTheScenesMarkdown(dummyMarkdown), {
+    gfm: true,
+  });
+  app.innerHTML = `
+    <main class="shell shell--behind">
+      <a href="#/" class="back-link back-link--converter">← Home</a>
+      <h1 class="behind-title">Behind the scenes</h1>
+      <p class="behind-lede lede">How this app works—in plain language.</p>
+      <article class="doc-prose">${html}</article>
+    </main>
+  `;
+}
+
 function render() {
   const route = parseRoute();
   if (route.name === "converter") {
     renderConverter();
   } else if (route.name === "catalogue") {
     renderCataloguePage();
+  } else if (route.name === "behind") {
+    renderBehindTheScenes();
   } else if (route.name === "recipe") {
     if (!route.recipeId) {
       location.hash = "#/catalogue";

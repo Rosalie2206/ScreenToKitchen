@@ -84,6 +84,132 @@ h1 {
   color: var(--color-text);
 }
 
+.home-actions {
+  margin: 0 0 1.5rem;
+}
+
+.home-behind-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.5rem 1.35rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-text) 32%, transparent);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 1.15rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.home-behind-btn:hover {
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.home-behind-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-text) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.shell--behind {
+  position: relative;
+  max-width: min(42rem, 100%);
+  padding-top: 0.25rem;
+  padding-bottom: 2rem;
+  align-self: flex-start;
+}
+
+.behind-title {
+  margin: 0 0 0.35rem;
+  padding-right: 5.5rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+}
+
+.behind-lede {
+  margin: 0 0 1.25rem;
+}
+
+.doc-prose {
+  font-size: 1.1rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.doc-prose h2 {
+  margin: 1.75rem 0 0.65rem;
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+.doc-prose h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1.25rem;
+}
+
+.doc-prose p {
+  margin: 0 0 0.85rem;
+}
+
+.doc-prose ul,
+.doc-prose ol {
+  margin: 0 0 1rem;
+  padding-left: 1.4rem;
+}
+
+.doc-prose li {
+  margin-bottom: 0.35rem;
+}
+
+.doc-prose hr {
+  margin: 1.5rem 0;
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+}
+
+.doc-prose strong {
+  font-weight: 600;
+}
+
+.doc-prose em {
+  font-style: italic;
+}
+
+.doc-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0 1.25rem;
+  font-size: 1rem;
+}
+
+.doc-prose th,
+.doc-prose td {
+  border: 1px solid color-mix(in srgb, var(--color-text) 18%, transparent);
+  padding: 0.45rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc-prose th {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+
+.doc-prose code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.92em;
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  padding: 0.1em 0.25em;
+  border-radius: 0.2em;
+}
+
+
 .upload {
   margin-top: 1.5rem;
   padding-top: 1.25rem;
