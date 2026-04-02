@@ -401,7 +401,22 @@ export function escapeHtml(text) {
 
 export function buildRecipeCardHtml(recipe) {
   const t = escapeHtml(recipe.title || "Recipe");
-  const ing = (recipe.ingredients || []).map((x) => escapeHtml(x));
+  const formatIngredient = (ing) => {
+    if (typeof ing === "string") return escapeHtml(ing);
+    if (!ing || typeof ing !== "object") return escapeHtml(String(ing ?? ""));
+    const name = typeof ing.name === "string" ? ing.name : "";
+    const quantity = ing.quantity;
+    const unit = ing.unit;
+    const q = quantity == null ? null : quantity;
+    const u = unit == null ? null : unit;
+
+    if (q == null && u == null) return escapeHtml(name);
+    if (q == null && u != null) return escapeHtml(`${u} ${name}`.trim());
+    if (q != null && u == null) return escapeHtml(`${q} ${name}`.trim());
+    return escapeHtml(`${q} ${u} ${name}`.trim());
+  };
+
+  const ing = (recipe.ingredients || []).map((x) => formatIngredient(x));
   const steps = (recipe.steps || []).map((x) => escapeHtml(x));
   const notes = (recipe.notes || []).map((x) => escapeHtml(x));
 

@@ -3,3 +3,4 @@ dist
 dist-llm
 .DS_Store
 *.local
+.vercel

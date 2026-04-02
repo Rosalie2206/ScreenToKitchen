@@ -11,12 +11,29 @@ import {
   type ParsedRecipe,
 } from "../lib/llm/schema.js";
 import type { Recipe } from "../types/recipe.js";
+import { convertOCRToRecipeLocal } from "../lib/llm/convertOcrToRecipeLocal.js";
+import { convertOCRToRecipeHybrid } from "../lib/llm/hybrid/hybrid.js";
 
 const SYSTEM_PROMPT =
   "You are a professional chef and recipe editor. Convert messy OCR text into a clean, structured recipe. Infer missing details when reasonable, but do not hallucinate unrealistic ingredients or steps.";
 
 const MODEL = "gpt-4.1" as const;
 const TEMPERATURE = 0.2;
+const USE_OLLAMA =
+  process.env.USE_OLLAMA?.trim().toLowerCase() === "true" ||
+  (process.env.OLLAMA_BASE_URL?.trim().length ?? 0) > 0;
+
+function messageFromUnknown(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message || fallback;
+  return fallback;
+}
+
+function zodOrErrorMessage(err: unknown): string {
+  if (err instanceof ZodError) return err.message;
+  if (err instanceof SyntaxError) return err.message;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
 
 /** Vercel may provide parsed JSON or a raw string depending on config. */
 function parseRequestBody(body: unknown): unknown {
@@ -80,7 +97,45 @@ function setCors(res: VercelResponse, origin: string | undefined): void {
     "*";
   res.setHeader("Access-Control-Allow-Origin", allow);
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, x-use-local-llm, x-local-llm-provider",
+  );
+}
+
+function parseBooleanLike(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return undefined;
+  const v = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(v)) return true;
+  if (["0", "false", "no", "off"].includes(v)) return false;
+  return undefined;
+}
+
+function resolveUseLocalLlm(req: VercelRequest): boolean {
+  const headerValue = req.headers["x-use-local-llm"];
+  const fromHeader = Array.isArray(headerValue)
+    ? parseBooleanLike(headerValue[0])
+    : parseBooleanLike(headerValue);
+  if (typeof fromHeader === "boolean") return fromHeader;
+
+  const fromQuery = parseBooleanLike(req.query.useLocal);
+  if (typeof fromQuery === "boolean") return fromQuery;
+
+  return process.env.USE_LOCAL_LLM?.trim().toLowerCase() === "true";
+}
+
+function resolveLocalLlmProvider(req: VercelRequest): "ollama" | "openai_compatible" {
+  const headerValue = req.headers["x-local-llm-provider"];
+  const fromHeader = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const normalized = String(fromHeader ?? req.query.localProvider ?? "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "openai_compatible") return "openai_compatible";
+  if (normalized === "ollama") return "ollama";
+  return process.env.LOCAL_LLM_PROVIDER?.trim().toLowerCase() === "openai_compatible"
+    ? "openai_compatible"
+    : "ollama";
 }
 
 /**
@@ -173,12 +228,37 @@ export default async function handler(
     return;
   }
 
+  // Hybrid mode (local first if enabled via env):
+  // - If USE_LOCAL_LLM=true, we attempt Ollama first with a short timeout.
+  // - If local fails (network/timeout/JSON), we fall back to OpenAI automatically.
+  try {
+    const useLocalLlm = resolveUseLocalLlm(req);
+    const localProvider = resolveLocalLlmProvider(req);
+    const hybridRecipe = await convertOCRToRecipeHybrid(text, {
+      useLocalLlm,
+      localProvider,
+    });
+    res.status(200).json({
+      recipe: toRecipeResponse(hybridRecipe as ParsedRecipe) as Recipe,
+    });
+    return;
+  } catch (e) {
+    res.status(502).json({
+      error: messageFromUnknown(
+        e,
+        "Failed to convert OCR text to recipe",
+      ),
+      code: "HYBRID_LLM_ERROR",
+    });
+    return;
+  }
+
   let client: OpenAI;
   try {
     client = getOpenAI();
   } catch (e) {
     res.status(500).json({
-      error: e instanceof Error ? e.message : "Server configuration error",
+      error: messageFromUnknown(e, "Server configuration error"),
       code: "CONFIG_ERROR",
     });
     return;
@@ -194,8 +274,7 @@ export default async function handler(
     raw = await runCompletion(client, messages);
   } catch (e) {
     res.status(502).json({
-      error:
-        e instanceof Error ? e.message : "OpenAI request failed",
+      error: messageFromUnknown(e, "OpenAI request failed"),
       code: "OPENAI_ERROR",
     });
     return;
@@ -206,12 +285,7 @@ export default async function handler(
     parsed = parseRecipeJson(raw);
   } catch (firstErr) {
     // Retry once with stricter instruction (requirement #4)
-    const msg =
-      firstErr instanceof ZodError
-        ? firstErr.message
-        : firstErr instanceof SyntaxError
-          ? firstErr.message
-          : String(firstErr);
+    const msg = zodOrErrorMessage(firstErr);
 
     const retryMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       ...messages,
@@ -227,7 +301,7 @@ export default async function handler(
       raw2 = await runCompletion(client, retryMessages);
     } catch (e) {
       res.status(502).json({
-        error: e instanceof Error ? e.message : "OpenAI retry failed",
+        error: messageFromUnknown(e, "OpenAI retry failed"),
         code: "OPENAI_ERROR",
       });
       return;

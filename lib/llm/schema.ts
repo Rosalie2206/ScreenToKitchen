@@ -32,6 +32,16 @@ export function extractJsonPayload(raw: string): string {
   let t = raw.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)```$/m.exec(t);
   if (fenced) t = fenced[1].trim();
+  // Some models may include leading/trailing commentary even when instructed.
+  // To be more robust, if we don't clearly have a JSON object, try extracting
+  // the first top-level `{...}` region.
+  if (!t.startsWith("{") || !t.endsWith("}")) {
+    const start = t.indexOf("{");
+    const end = t.lastIndexOf("}");
+    if (start !== -1 && end !== -1 && end > start) {
+      t = t.slice(start, end + 1).trim();
+    }
+  }
   return t;
 }
 

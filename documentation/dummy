@@ -1,82 +1,121 @@
 # How ScreenToKitchen Works
 
-This note is for anyone who wants a friendly overview of what the app does and how the technical pieces fit together—without assuming you write code for a living.
+This note explains the app in plain language, but still covers the technical pieces so non-developers can understand what is happening.
 
 ---
 
-## What the app does (in one breath)
+## What this app does
 
-You take a **photo of a recipe** (from a book, a screen, or a printout). The app **reads the text** from the image, **turns it into a structured recipe** (title, ingredients, steps), lets you **save** it, and **browse** saved recipes in a **catalogue**. You can also **install** the site on your phone like a small app (a “Progressive Web App”).
+You take a picture of a recipe, and the app:
 
----
-
-## Where it runs
-
-- The **interface** you tap and type in is a **website** built with modern web technology. It is designed to be hosted on **GitHub Pages** (free static hosting), which means there is no traditional “app store” install—you open it in the browser.
-- Optional: a **server** piece can run on **Vercel** for advanced recipe cleanup using artificial intelligence. That part is separate from the simple “works entirely in the browser” path (see below).
+1. Reads text from the image (OCR)
+2. Sends that text to an AI conversion service
+3. Shows a clean recipe (title, ingredients, steps, notes)
+4. Lets you save it and browse saved recipes in a catalogue
 
 ---
 
-## The journey of your photo
+## What changed recently (high level)
 
-### 1. Choosing a photo
-
-When you pick an image, the app keeps it **on your device** in the browser’s memory. It does not upload the picture to a company server **unless** you later use a feature that explicitly calls a server (such as the optional AI recipe endpoint).
-
-### 2. The “Converter” screen
-
-After you choose a photo, you go to a screen called **Converter**. Here two things can happen:
-
-**A) Reading the text (OCR)**  
-“**OCR**” means *optical character recognition*—the computer tries to read letters and numbers from the picture, like copying text off a photo. This runs **inside your browser** using a library called **Tesseract**. The first time, it may download a small language pack (similar to a dictionary) so it can recognize English text.
-
-**B) Turning text into a recipe**  
-Raw OCR output is often messy: broken lines, extra words from the magazine margin, page numbers, or ads. The app includes **rules** (small programs that run on your phone or computer) to:
-
-- Drop obvious junk (URLs, “subscribe here”, stray symbols).
-- Guess where the real recipe starts and ends.
-- Split content into **ingredients** and **steps** when it can.
-
-There is also an optional **cloud** step: a **serverless** function can send that text to **OpenAI** and ask for a cleaner, structured recipe. Your **API key** for that service stays on the server—never in the app people download—so your key is not exposed in the public website code.
-
-### 3. Saving and the catalogue
-
-When you tap **Save**, the structured recipe is stored in **session storage**—think of it as a scratchpad inside your browser for this browsing session. Saved items appear in the **Catalogue**, with links to open each recipe again. If you clear site data or use another device, those saved recipes won’t be there unless you add accounts or cloud sync later (the current design is simple and local).
-
-### 4. Moving between “pages” without reloading
-
-The app uses **hash routing** (the part of the address after `#`). That keeps navigation smooth and works well on **GitHub Pages**, which only serves static files and doesn’t run a custom server for every URL.
+- The home page now has a **logo + header** and a **dropdown menu** (icon button on the top-right) with:
+  - Catalogue
+  - Behind the scenes
+- The home page also shows a **live status panel**:
+  - Backend status (green/red)
+  - LLM status (green/red)
+  - Error details when something is offline
+- The AI conversion now supports **hybrid LLM mode**:
+  - Try local model first (if enabled)
+  - Fallback to OpenAI if local fails
 
 ---
 
-## Words you might see in technical discussions
+## Where things run
 
-| Term | Plain meaning |
-|------|----------------|
-| **Frontend** | Everything that runs in your browser: buttons, screens, OCR, saving in session storage. |
-| **Backend / API** | A small program in the cloud that can talk to OpenAI safely; you **POST** text, it returns JSON. |
-| **Serverless** | The cloud runs the API only when someone calls it—no server you manage 24/7. |
-| **PWA** | The site can be “installed” and feel more like an app; offline behavior depends on how it’s configured. |
-| **JSON** | A standard way to send structured data (recipe fields) between the browser and the server. |
-| **Environment variable** | A secret setting on the server (like `OPENAI_API_KEY`)—not baked into public web files. |
-
----
-
-## Why some things are designed this way
-
-- **GitHub Pages** is great for a free, simple site but only serves **static** files. Hash URLs and client-side logic avoid needing special server configuration for every page.
-- **Tesseract in the browser** avoids sending your photos to a server just to read text—privacy-friendly for the basic flow.
-- **OpenAI behind a Vercel function** keeps the **secret key** off the public internet; only your server-side code can use it.
+- **Frontend (browser):**
+  - User interface
+  - Image preview
+  - OCR preprocessing + text extraction (Tesseract)
+  - Local saved recipes for current session
+- **Backend API (serverless route):**
+  - Receives OCR text
+  - Calls AI model(s)
+  - Validates JSON recipe format
+  - Returns structured recipe to frontend
 
 ---
 
-## If you want to go deeper
+## AI conversion flow (simple version)
 
-Developers on the project will look at folders such as:
+### Step 1: OCR in the browser
 
-- **`src/`** — user interface and browser logic  
-- **`api/`** — Vercel function for the optional AI recipe endpoint  
-- **`lib/llm/`** — shared parsing and types for structured recipes  
-- **`documentation/`** — notes like this one  
+The image is preprocessed (contrast/threshold) to improve text readability. OCR text is then cleaned before sending to AI.
 
-That’s enough to orient a curious non-developer to how ScreenToKitchen fits together technically—without needing to read the code line by line.
+### Step 2: Hybrid AI conversion
+
+Backend route receives OCR text and uses this strategy:
+
+1. If local mode is enabled, try local model first
+2. If local fails, automatically fallback to OpenAI
+3. Return a structured recipe JSON object
+
+### Step 3: Display + Save
+
+The app shows the converted recipe. If conversion succeeds, the user can save it to the catalogue.
+
+---
+
+## Health/status indicator on home page
+
+The home page calls a health endpoint and shows:
+
+- **Backend:**
+  - Green = API reachable
+  - Red = API not reachable
+- **LLM:**
+  - Green = local and/or OpenAI path available
+  - Red = no available model path
+- **Details line:**
+  - Shows specific error text (for example missing API key or local server unreachable)
+
+---
+
+## Local model setup options
+
+The app supports two local provider styles:
+
+1. **Ollama-style**
+2. **OpenAI-compatible local server** (example: LM Studio style endpoint)
+
+This is controlled with environment variables.
+
+---
+
+## Common technical terms
+
+| Term | Meaning |
+|------|---------|
+| **OCR** | Reads text from an image. |
+| **LLM** | Large Language Model used to structure noisy OCR text into a clean recipe. |
+| **Hybrid fallback** | Try one AI path first, then switch to backup path if it fails. |
+| **Serverless API** | Backend endpoint that runs only when called. |
+| **JSON** | Structured data format returned by the AI and validated by the backend. |
+| **Environment variable** | Hidden configuration value used at runtime (for model URL, API keys, mode flags, etc.). |
+
+---
+
+## Why this architecture is used
+
+- **Better reliability:** fallback from local model to OpenAI
+- **Better transparency:** health panel shows what is offline
+- **Better quality:** OCR preprocessing + LLM cleanup
+- **Safer secrets:** API keys stay on backend, never in browser code
+
+---
+
+## If you want to inspect the project structure
+
+- `src/` — frontend screens, menu, status UI, OCR flow
+- `api/` — backend routes (`recipe`, `health`)
+- `lib/llm/` — local/API/hybrid LLM logic and validation
+- `documentation/` — this file and related human-readable notes

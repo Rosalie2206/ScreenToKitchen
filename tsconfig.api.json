@@ -6,7 +6,8 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    "lib": ["ES2022", "DOM"]
   },
   "include": ["api/**/*.ts", "lib/llm/**/*.ts", "types/**/*.ts"]
 }

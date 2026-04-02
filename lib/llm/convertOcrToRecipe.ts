@@ -38,7 +38,8 @@ function getClient(options: ConvertOcrOptions): OpenAI {
       "convertOCRToRecipe: missing API key. Pass options.apiKey or set OPENAI_API_KEY.",
     );
   }
-  return new OpenAI({ apiKey });
+  const baseURL = options.baseURL ?? process.env.OPENAI_BASE_URL;
+  return new OpenAI({ apiKey, baseURL });
 }
 
 /**
@@ -50,13 +51,17 @@ async function callModelAndParse(
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
   attempt: number,
   maxRetries: number,
+  jsonMode: "json_object" | "text",
 ): Promise<Recipe> {
-  const completion = await client.chat.completions.create({
+  const request: OpenAI.Chat.ChatCompletionCreateParams = {
     model,
     temperature: 0.2,
-    response_format: { type: "json_object" },
     messages,
-  });
+  };
+  if (jsonMode === "json_object") {
+    request.response_format = { type: "json_object" };
+  }
+  const completion = await client.chat.completions.create(request);
 
   const raw = completion.choices[0]?.message?.content;
   if (!raw) {
@@ -89,8 +94,23 @@ async function callModelAndParse(
       { role: "user", content: repairUser },
     ];
 
-    return callModelAndParse(client, model, repairMessages, attempt + 1, maxRetries);
+    return callModelAndParse(
+      client,
+      model,
+      repairMessages,
+      attempt + 1,
+      maxRetries,
+      jsonMode,
+    );
   }
+}
+
+function pickJsonMode(baseURL: string | undefined): "json_object" | "text" {
+  const b = (baseURL ?? "").trim().toLowerCase();
+  if (!b) return "json_object";
+  // Local OpenAI-compatible servers often reject json_object mode.
+  if (b.includes("127.0.0.1") || b.includes("localhost")) return "text";
+  return "json_object";
 }
 
 /**
@@ -186,13 +206,15 @@ export async function convertOCRToRecipe(
   const client = getClient(options);
   const model = options.model ?? process.env.OPENAI_MODEL ?? DEFAULT_MODEL;
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const effectiveBaseURL = options.baseURL ?? process.env.OPENAI_BASE_URL;
+  const jsonMode = pickJsonMode(effectiveBaseURL);
 
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: buildUserPrompt(trimmed) },
   ];
 
-  let recipe = await callModelAndParse(client, model, messages, 1, maxRetries);
+  let recipe = await callModelAndParse(client, model, messages, 1, maxRetries, jsonMode);
 
   // Bonus: ensure confidence is set (prefer model; else heuristic)
   if (recipe.confidence == null) {

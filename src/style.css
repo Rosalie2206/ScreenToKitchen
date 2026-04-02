@@ -69,52 +69,170 @@ h1 {
   margin-top: 1.75rem;
 }
 
-.home-nav {
-  margin: 0 0 1.25rem;
+.home-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
-.home-nav__link {
-  color: color-mix(in srgb, var(--color-text) 85%, transparent);
-  font-size: 1.15rem;
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
+.home-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
 }
 
-.home-nav__link:hover {
-  color: var(--color-text);
+.home-logo {
+  width: 2.2rem;
+  height: 2.2rem;
+  object-fit: contain;
+  flex: 0 0 auto;
 }
 
-.home-actions {
-  margin: 0 0 1.5rem;
+.home-title {
+  margin: 0 0 0.5rem;
 }
 
-.home-behind-btn {
+.home-menu {
+  position: relative;
+}
+
+.home-menu__trigger {
+  list-style: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.75rem;
-  padding: 0.5rem 1.35rem;
+  gap: 0.35rem;
+  width: 2.3rem;
+  min-width: 2.3rem;
+  height: 2.3rem;
+  padding: 0 0.45rem;
   border-radius: 0.5rem;
-  border: 1px solid color-mix(in srgb, var(--color-text) 32%, transparent);
-  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent);
+  background: color-mix(in srgb, var(--color-bg) 55%, #fff 45%);
   color: var(--color-text);
-  font-family: inherit;
-  font-size: 1.15rem;
-  text-decoration: none;
   cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
+  user-select: none;
+  font-size: 1.35rem;
+  line-height: 1;
 }
 
-.home-behind-btn:hover {
-  background: color-mix(in srgb, var(--color-text) 10%, transparent);
-  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+.home-menu__trigger::-webkit-details-marker {
+  display: none;
 }
 
-.home-behind-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--color-text) 40%, transparent);
-  outline-offset: 2px;
+.home-menu__icon {
+  width: 1.3rem;
+  height: 1.3rem;
+  object-fit: contain;
+  display: block;
+}
+
+.home-menu[open] .home-menu__trigger {
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+
+.home-menu__panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  min-width: 13rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border-radius: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--color-text) 16%, transparent);
+  background: color-mix(in srgb, var(--color-bg) 80%, #fff 20%);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--color-text) 12%, transparent);
+  z-index: 30;
+}
+
+.home-menu__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0.48rem 0.6rem;
+  border-radius: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--color-text) 16%, transparent);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: 1.05rem;
+  background: color-mix(in srgb, var(--color-bg) 55%, #fff 45%);
+}
+
+.home-menu__item:hover {
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+
+.health-panel {
+  margin: 0 0 1.5rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-text) 14%, transparent);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--color-bg) 55%, #fff 45%);
+  box-shadow: 0 3px 14px color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+
+.health-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.35rem 0;
+}
+
+.health-label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 1.05rem;
+}
+
+.health-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  white-space: nowrap;
+}
+
+.health-details {
+  margin: 0.6rem 0 0;
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+  word-break: break-word;
+}
+
+.health-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-text) 35%, transparent);
+}
+
+.health-dot--ok {
+  background: #16a34a; /* green */
+}
+
+.health-dot--bad {
+  background: #dc2626; /* red */
+}
+
+.health-badge--ok {
+  color: var(--color-text);
+  border-color: color-mix(in srgb, #16a34a 35%, transparent);
+  background: color-mix(in srgb, #16a34a 18%, transparent);
+}
+
+.health-badge--bad {
+  color: var(--color-text);
+  border-color: color-mix(in srgb, #dc2626 35%, transparent);
+  background: color-mix(in srgb, #dc2626 18%, transparent);
 }
 
 .shell--behind {
@@ -207,6 +325,29 @@ h1 {
   background: color-mix(in srgb, var(--color-text) 7%, transparent);
   padding: 0.1em 0.25em;
   border-radius: 0.2em;
+}
+
+.tech-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.4rem 0 1rem;
+  flex-wrap: wrap;
+}
+
+.tech-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-text) 18%, transparent);
+  text-decoration: none;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-bg) 55%, #fff 45%);
+}
+
+.tech-tab--active {
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 30%, transparent);
 }
 
 

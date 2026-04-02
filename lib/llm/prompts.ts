@@ -24,8 +24,12 @@ const SCHEMA_INSTRUCTIONS = `Return a single JSON object with exactly these keys
 Rules:
 - Output ONLY valid JSON. No markdown, no code fences, no commentary.
 - Clean OCR noise: fix obvious typos, remove stray characters, merge words split across lines.
-- Normalize temperatures in step text to °F when US-style baking (e.g. "350 degrees" in baking context → 350°F in the step string).
-- Standardize units: prefer metric (g, kg, ml, L) or common US cups/tbsp/tsp when appropriate; keep one system per ingredient where possible.
+- Normalize temperatures in step text to °C (convert from °F when present; e.g. "350°F" in baking context → "175°C" in the step string).
+- Standardize units to European/metric only in both ingredient unit fields and step text:
+  - Weight: lb/lbs → grams (g) or kilograms (kg when large); oz/ounces → grams (g)
+  - Volume: cups → ml, tbsp/tablespoon → ml, tsp/teaspoon → ml
+  - Temperature: °F → °C
+  - Output ingredient units as one of: g, kg, ml, L, or null.
 - Merge duplicate ingredients (same item split across two OCR lines) into one entry with combined quantity.
 - Split narrative text into clear ordered steps.
 - If the input is not a recipe, still return a best-effort object with title describing the content and empty/minimal arrays.

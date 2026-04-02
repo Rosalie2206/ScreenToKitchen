@@ -29,6 +29,8 @@ import type OpenAI from "openai";
 export type ConvertOcrOptions = {
   /** Defaults to process.env.OPENAI_API_KEY */
   apiKey?: string;
+  /** Optional OpenAI-compatible base URL (e.g. http://127.0.0.1:1234/v1) */
+  baseURL?: string;
   /** e.g. "gpt-4o-mini", "gpt-4o" */
   model?: string;
   /** Retries when the model returns invalid JSON or validation fails (default 3) */

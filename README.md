@@ -5,10 +5,74 @@ Progressive Web App (Vite) configured for **GitHub Pages** at
 
 ## Local development
 
+ScreenToKitchen has:
+- a Vite frontend (`src/`)
+- a local/serverless backend (`api/recipe.ts`, `api/health.ts`)
+
+Run both in separate terminals.
+
+### Terminal A — frontend (UI + OCR in browser)
 ```bash
 npm install
 npm run dev
 ```
+
+### Terminal B — backend (Vercel local API)
+```bash
+npx vercel dev
+```
+
+### Point the frontend to the backend
+If your Vercel local URL is `http://localhost:3000`:
+
+```bash
+export VITE_API_BASE_URL="http://localhost:3000"
+```
+
+Restart `npm run dev` (or reload after restart) so the env var is applied.
+
+The homepage status panel uses `/api/health` and will show:
+- backend status (up/down)
+- LLM status (local/openai availability)
+
+## LLM mode (hybrid)
+The backend converts OCR text using:
+
+- **Local Ollama (Mistral)** first, if enabled
+- **OpenAI fallback** (production-ready default)
+
+Environment variables (set them for `vercel dev` / Vercel):
+
+- `USE_LOCAL_LLM` = `"true"` to try local LLM first (`"false"` skips local and uses OpenAI)
+- `LOCAL_LLM_PROVIDER` = `ollama` (default) or `openai_compatible`
+- `LOCAL_LLM_BASE_URL` = local server base URL (default `http://127.0.0.1:1234`)
+- `OLLAMA_BASE_URL` = legacy alias for local base URL (still supported)
+- `OLLAMA_MODEL` = default `mistral`
+- `LOCAL_LLM_MODEL` = local model name override (e.g. `openai/gpt-oss-20b`)
+- `LOCAL_LLM_API_KEY` = optional key for OpenAI-compatible local servers (defaults to `local-llm`)
+- `LOCAL_LLM_TIMEOUT_MS` = default `10000`
+- `OPENAI_API_KEY` (required for fallback-to-OpenAI or OpenAI-only mode)
+
+### Example local LLM setup (Ollama-style)
+If your local LLM server is running on `http://127.0.0.1:1234` with Ollama-compatible endpoints:
+
+```bash
+export USE_LOCAL_LLM="true"
+export LOCAL_LLM_PROVIDER="ollama"
+export LOCAL_LLM_BASE_URL="http://127.0.0.1:1234"
+export LOCAL_LLM_MODEL="mistral"
+```
+
+### Example local LLM setup (OpenAI-compatible, e.g. LM Studio)
+```bash
+export USE_LOCAL_LLM="true"
+export LOCAL_LLM_PROVIDER="openai_compatible"
+export LOCAL_LLM_BASE_URL="http://127.0.0.1:1234"
+export LOCAL_LLM_MODEL="openai/gpt-oss-20b"
+export LOCAL_LLM_API_KEY="local-llm"
+```
+
+If local LLM fails, the backend automatically falls back to OpenAI (when `OPENAI_API_KEY` is set).
 
 ## Build
 

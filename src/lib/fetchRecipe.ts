@@ -14,6 +14,23 @@ function apiBase(): string {
   return (base?.replace(/\/$/, "") ?? "") as string;
 }
 
+function resolveUseLocalLlmOverride(): boolean | undefined {
+  const raw = import.meta.env.VITE_USE_LOCAL_LLM;
+  if (raw == null) return undefined;
+  const v = String(raw).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(v)) return true;
+  if (["0", "false", "no", "off"].includes(v)) return false;
+  return undefined;
+}
+
+function resolveLocalLlmProviderOverride(): string | undefined {
+  const raw = import.meta.env.VITE_LOCAL_LLM_PROVIDER;
+  if (raw == null) return undefined;
+  const v = String(raw).trim().toLowerCase();
+  if (v === "openai_compatible" || v === "ollama") return v;
+  return undefined;
+}
+
 export class RecipeApiError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -39,9 +56,18 @@ export async function fetchRecipe(ocrText: string): Promise<Recipe> {
   const url = `${apiBase()}/api/recipe`;
   let res: Response;
   try {
+    const useLocal = resolveUseLocalLlmOverride();
+    const provider = resolveLocalLlmProviderOverride();
+    const headers: HeadersInit = { "Content-Type": "application/json" };
+    if (typeof useLocal === "boolean") {
+      headers["x-use-local-llm"] = String(useLocal);
+    }
+    if (provider) {
+      headers["x-local-llm-provider"] = provider;
+    }
     res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ ocrText: trimmed } satisfies { ocrText: string }),
     });
   } catch (e) {
@@ -56,7 +82,19 @@ export async function fetchRecipe(ocrText: string): Promise<Recipe> {
   try {
     payload = await res.json();
   } catch {
-    throw new RecipeApiError("Invalid JSON in response", res.status, "BAD_RESPONSE");
+    // If the backend crashed, we might get an HTML error page instead of JSON.
+    let bodySnippet = "";
+    try {
+      bodySnippet = await res.text();
+    } catch {
+      // ignore
+    }
+    bodySnippet = bodySnippet.trim().slice(0, 300);
+    throw new RecipeApiError(
+      `Invalid JSON in response (HTTP ${res.status}). ${bodySnippet ? `Snippet: ${bodySnippet}` : ""}`,
+      res.status,
+      "BAD_RESPONSE",
+    );
   }
 
   if (!res.ok) {

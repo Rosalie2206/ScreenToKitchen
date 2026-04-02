@@ -11,6 +11,8 @@
  * ```
  */
 export { convertOCRToRecipe, heuristicOcrConfidence } from "./convertOcrToRecipe.js";
+export { convertOCRToRecipeLocal } from "./convertOcrToRecipeLocal.js";
+export { convertOCRToRecipeHybrid, convertOCRToRecipeHybridWithMode } from "./hybrid/hybrid.js";
 export type { Recipe, Ingredient, ConvertOcrOptions } from "./types.js";
 export { RecipeSchema, IngredientSchema, parseRecipeJson } from "./schema.js";
 export { SYSTEM_PROMPT, buildUserPrompt } from "./prompts.js";
