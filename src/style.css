@@ -249,6 +249,19 @@ h1 {
   background: color-mix(in srgb, #dc2626 18%, transparent);
 }
 
+.health-dot--na {
+  background: color-mix(in srgb, var(--color-text) 32%, transparent);
+}
+
+.health-badge--na {
+  color: var(--color-text);
+  border-color: color-mix(in srgb, var(--color-text) 22%, transparent);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  white-space: normal;
+  max-width: min(100%, 20rem);
+  text-align: right;
+}
+
 .shell--behind {
   position: relative;
   max-width: min(42rem, 100%);

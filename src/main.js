@@ -101,7 +101,7 @@ function renderMenuHeader() {
         <a href="#/" aria-label="Go to home">
           <img class="home-logo" src="${import.meta.env.BASE_URL}home-logo.png" alt="ScreenToKitchen logo" />
         </a>
-        <h1 class="home-title">ScreenToKitchen</h1>
+        <h1 class="home-title">Screen To Kitchen</h1>
       </div>
       <details class="home-menu">
         <summary class="home-menu__trigger" aria-label="Open menu">
@@ -121,7 +121,7 @@ function renderMenuHeader() {
 function renderHome() {
   revokeImage();
   lastConverterRecipe = null;
-  document.title = "Screen To Kitchen";
+  document.title = "ScreenToKitchen";
 
   app.innerHTML = `
     <main class="shell">
@@ -152,60 +152,128 @@ function getHealthPingUrl() {
   return `${base}/api/health`;
 }
 
+/**
+ * @param {'ok'|'bad'|'na'} state — na = not applicable / disabled
+ */
+function setHealthRow(dot, badge, state, text) {
+  if (!dot || !badge) return;
+  dot.classList.remove("health-dot--ok", "health-dot--bad", "health-dot--na");
+  badge.classList.remove("health-badge--ok", "health-badge--bad", "health-badge--na");
+  if (state === "ok") {
+    dot.classList.add("health-dot--ok");
+    badge.classList.add("health-badge--ok");
+  } else if (state === "bad") {
+    dot.classList.add("health-dot--bad");
+    badge.classList.add("health-badge--bad");
+  } else {
+    dot.classList.add("health-dot--na");
+    badge.classList.add("health-badge--na");
+  }
+  badge.textContent = text;
+}
+
 async function checkHealthUI() {
   const dotBackend = app.querySelector(".health-dot-backend");
   const badgeBackend = app.querySelector(".health-backend-badge");
-  const dotLlm = app.querySelector(".health-dot-llm");
-  const badgeLlm = app.querySelector(".health-llm-badge");
+  const dotLocal = app.querySelector(".health-dot-local");
+  const badgeLocal = app.querySelector(".health-local-badge");
+  const dotGroq = app.querySelector(".health-dot-groq");
+  const badgeGroq = app.querySelector(".health-groq-badge");
   const detailsEl = app.querySelector(".health-details");
   const pingUrl = getHealthPingUrl();
 
-  if (!dotBackend || !badgeBackend || !dotLlm || !badgeLlm) return;
+  const hasSplitLlm = dotGroq && badgeGroq && dotLocal && badgeLocal;
+
+  if (!dotBackend || !badgeBackend) return;
+  if (!hasSplitLlm) {
+    const dotLlm = app.querySelector(".health-dot-llm");
+    const badgeLlm = app.querySelector(".health-llm-badge");
+    if (!dotLlm || !badgeLlm) return;
+  }
 
   const setBackend = (ok, text) => {
-    dotBackend.classList.toggle("health-dot--ok", ok);
-    dotBackend.classList.toggle("health-dot--bad", !ok);
-    badgeBackend.classList.toggle("health-badge--ok", ok);
-    badgeBackend.classList.toggle("health-badge--bad", !ok);
-    badgeBackend.textContent = text;
-  };
-
-  const setLlm = (ok, text) => {
-    dotLlm.classList.toggle("health-dot--ok", ok);
-    dotLlm.classList.toggle("health-dot--bad", !ok);
-    badgeLlm.classList.toggle("health-badge--ok", ok);
-    badgeLlm.classList.toggle("health-badge--bad", !ok);
-    badgeLlm.textContent = text;
+    setHealthRow(dotBackend, badgeBackend, ok ? "ok" : "bad", text);
   };
 
   try {
     const health = await fetchHealth(5000);
     const llmMode = health.llm?.source ?? "none";
     setBackend(Boolean(health.backend?.ok), "Online");
-    if (health.llm?.ok) {
-      setLlm(true, health.llm.source === "local" ? "Local LLM OK" : "Groq OK");
+
+    if (hasSplitLlm) {
+      const loc = health.llm?.local;
+      if (!loc?.enabled) {
+        setHealthRow(dotLocal, badgeLocal, "na", "Not enabled");
+      } else if (loc.ok) {
+        setHealthRow(dotLocal, badgeLocal, "ok", "Reachable");
+      } else {
+        const err = loc.error?.trim() || "Unreachable";
+        const short =
+          err.length > 72 ? `${err.slice(0, 69)}…` : err;
+        setHealthRow(dotLocal, badgeLocal, "bad", short);
+      }
+
+      const gq = health.llm?.groq;
+      if (!gq?.enabled) {
+        setHealthRow(dotGroq, badgeGroq, "bad", "No GROQ_API_KEY");
+      } else if (gq.ok) {
+        setHealthRow(dotGroq, badgeGroq, "ok", "Connected (models.list)");
+      } else {
+        const err = gq.error?.trim() || "Failed";
+        const short =
+          err.length > 72 ? `${err.slice(0, 69)}…` : err;
+        setHealthRow(dotGroq, badgeGroq, "bad", short);
+      }
+
       if (detailsEl) {
-        detailsEl.textContent = `Ping URL: ${pingUrl} · LLM mode: ${llmMode}`;
+        detailsEl.textContent = `Ping URL: ${pingUrl} · Active route: ${llmMode} · Groq check: HTTP GET /api/health runs Groq models.list() on the server`;
       }
     } else {
-      const why =
-        health.llm?.source === "none"
-          ? "LLM unavailable"
-          : health.llm?.source === "local"
-            ? "Local LLM failed"
-            : "Groq unavailable";
-      setLlm(false, why);
-      if (detailsEl) {
-        const localErr = health.llm.local?.error ? `Local: ${health.llm.local.error}` : "";
-        const groqErr = health.llm.groq?.error ? `Groq: ${health.llm.groq.error}` : "";
-        const combined = [localErr, groqErr].filter(Boolean).join(" · ");
-        detailsEl.textContent = `Ping URL: ${pingUrl} · LLM mode: ${llmMode}${combined ? ` · ${combined}` : " · No error details available."}`;
+      const dotLlm = app.querySelector(".health-dot-llm");
+      const badgeLlm = app.querySelector(".health-llm-badge");
+      if (health.llm?.ok) {
+        setHealthRow(
+          dotLlm,
+          badgeLlm,
+          "ok",
+          health.llm.source === "local" ? "Local LLM OK" : "Groq OK",
+        );
+        if (detailsEl) {
+          detailsEl.textContent = `Ping URL: ${pingUrl} · LLM mode: ${llmMode}`;
+        }
+      } else {
+        const why =
+          health.llm?.source === "none"
+            ? "LLM unavailable"
+            : health.llm?.source === "local"
+              ? "Local LLM failed"
+              : "Groq unavailable";
+        setHealthRow(dotLlm, badgeLlm, "bad", why);
+        if (detailsEl) {
+          const localErr = health.llm.local?.error
+            ? `Local: ${health.llm.local.error}`
+            : "";
+          const groqErr = health.llm.groq?.error
+            ? `Groq: ${health.llm.groq.error}`
+            : "";
+          const combined = [localErr, groqErr].filter(Boolean).join(" · ");
+          detailsEl.textContent = `Ping URL: ${pingUrl} · LLM mode: ${llmMode}${combined ? ` · ${combined}` : " · No error details available."}`;
+        }
       }
     }
   } catch (e) {
     console.error(e);
     setBackend(false, "Offline");
-    setLlm(false, "Unavailable");
+    if (hasSplitLlm) {
+      setHealthRow(dotLocal, badgeLocal, "bad", "Unknown");
+      setHealthRow(dotGroq, badgeGroq, "bad", "Unknown");
+    } else {
+      const dotLlm = app.querySelector(".health-dot-llm");
+      const badgeLlm = app.querySelector(".health-llm-badge");
+      if (dotLlm && badgeLlm) {
+        setHealthRow(dotLlm, badgeLlm, "bad", "Unavailable");
+      }
+    }
     if (detailsEl) {
       detailsEl.textContent = `Ping URL: ${pingUrl} · Could not reach health endpoint. Is the backend running?`;
     }
@@ -551,21 +619,28 @@ function renderHealthCheckPage() {
       ${renderMenuHeader()}
       ${renderTechKitchenTabs("health")}
       <h1 class="behind-title">Tech Kitchen</h1>
-      <p class="behind-lede lede">Live backend and LLM status.</p>
+      <p class="behind-lede lede">Live backend, local LLM, and Groq status.</p>
       <section class="health-panel" aria-label="System status">
         <div class="health-row">
           <div class="health-label">
             <span class="health-dot health-dot--bad health-dot-backend" aria-hidden="true"></span>
-            Backend
+            Backend API
           </div>
           <span class="health-badge health-badge--bad health-backend-badge">Checking…</span>
         </div>
         <div class="health-row">
           <div class="health-label">
-            <span class="health-dot health-dot--bad health-dot-llm" aria-hidden="true"></span>
-            LLM
+            <span class="health-dot health-dot--bad health-dot-local" aria-hidden="true"></span>
+            Local LLM
           </div>
-          <span class="health-badge health-badge--bad health-llm-badge">Checking…</span>
+          <span class="health-badge health-badge--bad health-local-badge">Checking…</span>
+        </div>
+        <div class="health-row">
+          <div class="health-label">
+            <span class="health-dot health-dot--bad health-dot-groq" aria-hidden="true"></span>
+            Groq API
+          </div>
+          <span class="health-badge health-badge--bad health-groq-badge">Checking…</span>
         </div>
         <p class="hint health-details">Loading status details…</p>
       </section>
