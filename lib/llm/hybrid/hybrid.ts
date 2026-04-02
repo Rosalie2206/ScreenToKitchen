@@ -14,6 +14,14 @@ function normalizeOpenAiBaseUrl(base: string): string {
   return `${trimmed}/v1`;
 }
 
+/** Upstream libraries sometimes embed OpenAI doc URLs; this app uses Groq for cloud fallback. */
+function sanitizeCloudErrorMessage(msg: string): string {
+  return msg.replace(
+    /https:\/\/platform\.openai\.com\/[^\s)]+/gi,
+    "https://console.groq.com/docs/errors",
+  );
+}
+
 /**
  * Robust hybrid converter:
  * - Try LOCAL LLM (Ollama) first if USE_LOCAL_LLM=true
@@ -102,12 +110,13 @@ export async function convertOCRToRecipeHybridWithMode(
         ? localErr.message
         : localErr != null
           ? String(localErr)
-          : "unknown";
+          : "unknown (local failed but no error details)";
 
-    const apiMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    const rawApiMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    const apiMsg = sanitizeCloudErrorMessage(rawApiMsg);
     const quotaHint =
       /\b429\b|quota|rate limit/i.test(apiMsg)
-        ? " Groq rate limits or quota: check https://console.groq.com/"
+        ? " Check limits: https://console.groq.com/"
         : "";
 
     throw new Error(
