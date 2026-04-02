@@ -26,7 +26,7 @@ You take a picture of a recipe, and the app:
   - Error details when something is offline
 - The AI conversion now supports **hybrid LLM mode**:
   - Try local model first (if enabled)
-  - Fallback to OpenAI if local fails
+  - Fallback to Groq (cloud) if local fails
 
 ---
 
@@ -56,7 +56,7 @@ The image is preprocessed (contrast/threshold) to improve text readability. OCR 
 Backend route receives OCR text and uses this strategy:
 
 1. If local mode is enabled, try local model first
-2. If local fails, automatically fallback to OpenAI
+2. If local fails, automatically fallback to Groq
 3. Return a structured recipe JSON object
 
 ### Step 3: Display + Save
@@ -73,7 +73,7 @@ The home page calls a health endpoint and shows:
   - Green = API reachable
   - Red = API not reachable
 - **LLM:**
-  - Green = local and/or OpenAI path available
+  - Green = local and/or Groq path available
   - Red = no available model path
 - **Details line:**
   - Shows specific error text (for example missing API key or local server unreachable)
@@ -106,7 +106,7 @@ This is controlled with environment variables.
 
 ## Why this architecture is used
 
-- **Better reliability:** fallback from local model to OpenAI
+- **Better reliability:** fallback from local model to Groq
 - **Better transparency:** health panel shows what is offline
 - **Better quality:** OCR preprocessing + LLM cleanup
 - **Safer secrets:** API keys stay on backend, never in browser code

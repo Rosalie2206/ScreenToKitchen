@@ -2,9 +2,9 @@ export type HealthResponse = {
   backend: { ok: boolean };
   llm: {
     ok: boolean;
-    source: "local" | "openai" | "none";
+    source: "local" | "groq" | "none";
     local: { enabled: boolean; ok: boolean; error?: string };
-    openai: { enabled: boolean; ok: boolean; error?: string };
+    groq: { enabled: boolean; ok: boolean; error?: string };
   };
 };
 
@@ -61,4 +61,3 @@ export async function fetchHealth(
     clearTimeout(t);
   }
 }
-

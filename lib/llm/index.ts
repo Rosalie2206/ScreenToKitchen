@@ -6,7 +6,7 @@
  * import { convertOCRToRecipe } from "./lib/llm/index.js";
  *
  * const recipe = await convertOCRToRecipe(ocrString, {
- *   apiKey: process.env.OPENAI_API_KEY,
+ *   apiKey: process.env.GROQ_API_KEY,
  * });
  * ```
  */

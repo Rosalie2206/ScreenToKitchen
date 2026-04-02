@@ -1,38 +1,16 @@
 /**
  * Vercel serverless function: POST /api/recipe
- * Converts OCR text to a structured recipe via OpenAI. API key stays server-side only.
+ * Converts OCR text to a structured recipe via hybrid LLM (local optional + Groq fallback).
+ * API keys stay server-side only.
  */
-import OpenAI from "openai";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { ZodError } from "zod";
-import {
-  parseRecipeJson,
-  extractJsonPayload,
-  type ParsedRecipe,
-} from "../lib/llm/schema.js";
+import type { ParsedRecipe } from "../lib/llm/schema.js";
 import type { Recipe } from "../types/recipe.js";
-import { convertOCRToRecipeLocal } from "../lib/llm/convertOcrToRecipeLocal.js";
 import { convertOCRToRecipeHybrid } from "../lib/llm/hybrid/hybrid.js";
-
-const SYSTEM_PROMPT =
-  "You are a professional chef and recipe editor. Convert messy OCR text into a clean, structured recipe. Infer missing details when reasonable, but do not hallucinate unrealistic ingredients or steps.";
-
-const MODEL = "gpt-4.1" as const;
-const TEMPERATURE = 0.2;
-const USE_OLLAMA =
-  process.env.USE_OLLAMA?.trim().toLowerCase() === "true" ||
-  (process.env.OLLAMA_BASE_URL?.trim().length ?? 0) > 0;
 
 function messageFromUnknown(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message || fallback;
   return fallback;
-}
-
-function zodOrErrorMessage(err: unknown): string {
-  if (err instanceof ZodError) return err.message;
-  if (err instanceof SyntaxError) return err.message;
-  if (err instanceof Error) return err.message;
-  return String(err);
 }
 
 /** Vercel may provide parsed JSON or a raw string depending on config. */
@@ -46,48 +24,6 @@ function parseRequestBody(body: unknown): unknown {
     }
   }
   return body;
-}
-
-function buildUserPrompt(ocrText: string): string {
-  return `Convert the following OCR text into a structured recipe JSON following this schema:
-
-{
-  title: string,
-  description: string,
-  servings: number | null,
-  prep_time_minutes: number | null,
-  cook_time_minutes: number | null,
-  total_time_minutes: number | null,
-  ingredients: {
-    name: string,
-    quantity: number | null,
-    unit: string | null
-  }[],
-  steps: string[],
-  notes: string[]
-}
-
-OCR TEXT:
-${ocrText}
-
-Additional instructions (still output a single JSON object only):
-- Clean OCR noise: fix broken words, remove stray characters, merge lines that belong together.
-- Normalize units to common forms (g, kg, ml, L, cups, tbsp, tsp, °F/°C in step text as needed).
-- Merge duplicate ingredients if OCR split one item across lines.
-- Optionally add "confidence" (number 0–1) reflecting how reliable the OCR text seemed; we map it to confidence_score in the response.`;
-}
-
-/** Second attempt: stricter JSON-only instruction (requirement: retry once if parsing fails). */
-const RETRY_USER_ADDENDUM = `Your previous reply was not valid JSON or did not match the schema.
-
-Return ONLY one JSON object, no markdown fences, no commentary. The object must include keys: title, description, servings, prep_time_minutes, cook_time_minutes, total_time_minutes, ingredients, steps, notes. Use null for unknown numbers.`;
-
-function getOpenAI(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
-  return new OpenAI({ apiKey });
 }
 
 function setCors(res: VercelResponse, origin: string | undefined): void {
@@ -166,23 +102,6 @@ function toRecipeResponse(p: ParsedRecipe): Recipe {
   return base;
 }
 
-async function runCompletion(
-  client: OpenAI,
-  messages: OpenAI.Chat.ChatCompletionMessageParam[],
-): Promise<string> {
-  const completion = await client.chat.completions.create({
-    model: MODEL,
-    temperature: TEMPERATURE,
-    response_format: { type: "json_object" },
-    messages,
-  });
-  const raw = completion.choices[0]?.message?.content;
-  if (!raw) {
-    throw new Error("Empty completion from OpenAI");
-  }
-  return raw;
-}
-
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
@@ -228,9 +147,7 @@ export default async function handler(
     return;
   }
 
-  // Hybrid mode (local first if enabled via env):
-  // - If USE_LOCAL_LLM=true, we attempt Ollama first with a short timeout.
-  // - If local fails (network/timeout/JSON), we fall back to OpenAI automatically.
+  // Hybrid: optional local LLM first, then Groq (see lib/llm/hybrid/hybrid.ts).
   try {
     const useLocalLlm = resolveUseLocalLlm(req);
     const localProvider = resolveLocalLlmProvider(req);
@@ -241,7 +158,6 @@ export default async function handler(
     res.status(200).json({
       recipe: toRecipeResponse(hybridRecipe as ParsedRecipe) as Recipe,
     });
-    return;
   } catch (e) {
     res.status(502).json({
       error: messageFromUnknown(
@@ -250,73 +166,5 @@ export default async function handler(
       ),
       code: "HYBRID_LLM_ERROR",
     });
-    return;
   }
-
-  let client: OpenAI;
-  try {
-    client = getOpenAI();
-  } catch (e) {
-    res.status(500).json({
-      error: messageFromUnknown(e, "Server configuration error"),
-      code: "CONFIG_ERROR",
-    });
-    return;
-  }
-
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: buildUserPrompt(text) },
-  ];
-
-  let raw: string;
-  try {
-    raw = await runCompletion(client, messages);
-  } catch (e) {
-    res.status(502).json({
-      error: messageFromUnknown(e, "OpenAI request failed"),
-      code: "OPENAI_ERROR",
-    });
-    return;
-  }
-
-  let parsed: ParsedRecipe;
-  try {
-    parsed = parseRecipeJson(raw);
-  } catch (firstErr) {
-    // Retry once with stricter instruction (requirement #4)
-    const msg = zodOrErrorMessage(firstErr);
-
-    const retryMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      ...messages,
-      { role: "assistant", content: extractJsonPayload(raw).slice(0, 12000) },
-      {
-        role: "user",
-        content: `${RETRY_USER_ADDENDUM}\n\nParse/validation error: ${msg}`,
-      },
-    ];
-
-    let raw2: string;
-    try {
-      raw2 = await runCompletion(client, retryMessages);
-    } catch (e) {
-      res.status(502).json({
-        error: messageFromUnknown(e, "OpenAI retry failed"),
-        code: "OPENAI_ERROR",
-      });
-      return;
-    }
-
-    try {
-      parsed = parseRecipeJson(raw2);
-    } catch {
-      res.status(500).json({
-        error: "Model returned invalid JSON after retry",
-        code: "INVALID_MODEL_OUTPUT",
-      });
-      return;
-    }
-  }
-
-  res.status(200).json({ recipe: toRecipeResponse(parsed) });
 }

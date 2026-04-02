@@ -1,3 +1,5 @@
+import type Groq from "groq-sdk";
+
 /**
  * Structured recipe returned by {@link convertOCRToRecipe}.
  * Core fields match the product schema; bonus fields are optional.
@@ -24,17 +26,15 @@ export type Recipe = {
   source_language?: string | null;
 };
 
-import type OpenAI from "openai";
-
 export type ConvertOcrOptions = {
-  /** Defaults to process.env.OPENAI_API_KEY */
+  /** Defaults to process.env.GROQ_API_KEY */
   apiKey?: string;
-  /** Optional OpenAI-compatible base URL (e.g. http://127.0.0.1:1234/v1) */
+  /** Optional Groq API base URL override */
   baseURL?: string;
-  /** e.g. "gpt-4o-mini", "gpt-4o" */
+  /** Groq model id (e.g. llama3-70b-8192) */
   model?: string;
   /** Retries when the model returns invalid JSON or validation fails (default 3) */
   maxRetries?: number;
-  /** Inject a custom OpenAI client (for tests or proxies) */
-  client?: OpenAI;
+  /** Inject a custom Groq client (for tests or proxies) */
+  client?: Groq;
 };

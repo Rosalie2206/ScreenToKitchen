@@ -3,7 +3,7 @@ import { RecipeSchema } from "../schema.js";
 import type { Recipe } from "../types.js";
 
 /**
- * Fallback conversion using the remote API (OpenAI).
+ * Fallback conversion using Groq (chat completions).
  *
  * We validate the output shape before returning.
  */
@@ -11,7 +11,7 @@ export async function convertOCRToRecipeHybridApi(
   ocrText: string,
   opts: {
     model: string;
-    // OPENAI_API_KEY is read from env by convertOCRToRecipe
+    // GROQ_API_KEY is read from env by convertOCRToRecipe
     apiKey?: string;
     baseURL?: string;
     maxRetries?: number;

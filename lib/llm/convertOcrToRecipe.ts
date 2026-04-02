@@ -1,4 +1,5 @@
-import OpenAI from "openai";
+import Groq from "groq-sdk";
+import type { ChatCompletionMessageParam } from "groq-sdk/resources/chat/completions";
 import { ZodError } from "zod";
 import type { ConvertOcrOptions, Recipe } from "./types.js";
 import {
@@ -12,7 +13,8 @@ import {
   buildRepairPrompt,
 } from "./prompts.js";
 
-const DEFAULT_MODEL = "gpt-4o-mini";
+/** Default Groq chat model for recipe JSON extraction */
+const DEFAULT_MODEL = "llama3-70b-8192";
 const DEFAULT_MAX_RETRIES = 3;
 
 /**
@@ -30,38 +32,39 @@ export function heuristicOcrConfidence(ocrText: string): number {
   return Math.min(1, Math.max(0, Number(raw.toFixed(3))));
 }
 
-function getClient(options: ConvertOcrOptions): OpenAI {
+function getClient(options: ConvertOcrOptions): Groq {
   if (options.client) return options.client;
-  const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
+  const apiKey = options.apiKey ?? process.env.GROQ_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "convertOCRToRecipe: missing API key. Pass options.apiKey or set OPENAI_API_KEY.",
+      "convertOCRToRecipe: missing API key. Pass options.apiKey or set GROQ_API_KEY.",
     );
   }
-  const baseURL = options.baseURL ?? process.env.OPENAI_BASE_URL;
-  return new OpenAI({ apiKey, baseURL });
+  const baseURL = options.baseURL ?? process.env.GROQ_BASE_URL;
+  return new Groq(
+    baseURL ? { apiKey, baseURL } : { apiKey },
+  );
 }
 
 /**
- * Calls OpenAI Chat Completions with JSON mode, validates with Zod, retries on failure.
+ * Calls Groq Chat Completions, validates JSON with Zod, retries on failure.
  */
 async function callModelAndParse(
-  client: OpenAI,
+  client: Groq,
   model: string,
-  messages: OpenAI.Chat.ChatCompletionMessageParam[],
+  messages: ChatCompletionMessageParam[],
   attempt: number,
   maxRetries: number,
   jsonMode: "json_object" | "text",
 ): Promise<Recipe> {
-  const request: OpenAI.Chat.ChatCompletionCreateParams = {
+  const completion = await client.chat.completions.create({
     model,
     temperature: 0.2,
     messages,
-  };
-  if (jsonMode === "json_object") {
-    request.response_format = { type: "json_object" };
-  }
-  const completion = await client.chat.completions.create(request);
+    ...(jsonMode === "json_object"
+      ? { response_format: { type: "json_object" } }
+      : {}),
+  });
 
   const raw = completion.choices[0]?.message?.content;
   if (!raw) {
@@ -86,9 +89,8 @@ async function callModelAndParse(
       );
     }
 
-    // Retry: ask model to repair (keeps system prompt + user OCR + repair instruction)
     const repairUser = buildRepairPrompt(extractJsonPayload(raw), msg);
-    const repairMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    const repairMessages: ChatCompletionMessageParam[] = [
       ...messages,
       { role: "assistant", content: raw },
       { role: "user", content: repairUser },
@@ -155,7 +157,6 @@ function mergeDuplicateIngredients(
       map.set(key, { ...ing });
       continue;
     }
-    // Prefer the entry that has quantity info; concatenate names only if different wording
     if (existing.quantity == null && ing.quantity != null) {
       existing.quantity = ing.quantity;
       existing.unit = ing.unit ?? existing.unit;
@@ -185,14 +186,11 @@ function emptyRecipe(): Recipe {
 }
 
 /**
- * Converts raw OCR text into a validated {@link Recipe} using OpenAI.
+ * Converts raw OCR text into a validated {@link Recipe} using Groq.
  *
- * - Uses JSON response mode + Zod validation
+ * - Uses JSON response mode when supported + Zod validation
  * - Retries with a repair prompt if parsing fails
  * - Fills missing confidence with {@link heuristicOcrConfidence} when absent
- *
- * @param ocrText - Raw OCR output from an image
- * @param options - API key, model, retries, optional client
  */
 export async function convertOCRToRecipe(
   ocrText: string,
@@ -204,19 +202,18 @@ export async function convertOCRToRecipe(
   }
 
   const client = getClient(options);
-  const model = options.model ?? process.env.OPENAI_MODEL ?? DEFAULT_MODEL;
+  const model = options.model ?? process.env.GROQ_MODEL ?? DEFAULT_MODEL;
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
-  const effectiveBaseURL = options.baseURL ?? process.env.OPENAI_BASE_URL;
+  const effectiveBaseURL = options.baseURL ?? process.env.GROQ_BASE_URL;
   const jsonMode = pickJsonMode(effectiveBaseURL);
 
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+  const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: buildUserPrompt(trimmed) },
   ];
 
   let recipe = await callModelAndParse(client, model, messages, 1, maxRetries, jsonMode);
 
-  // Bonus: ensure confidence is set (prefer model; else heuristic)
   if (recipe.confidence == null) {
     recipe = {
       ...recipe,

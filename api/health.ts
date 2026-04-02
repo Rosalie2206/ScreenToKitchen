@@ -3,10 +3,10 @@
  *
  * Lightweight health check for the frontend:
  * - Backend handler is reachable if this route responds.
- * - Checks whether local Ollama is reachable (optional).
- * - Checks whether OpenAI credentials are configured and reachable (cheap: list models).
+ * - Checks whether local Ollama / OpenAI-compatible server is reachable (optional).
+ * - Checks whether Groq credentials are configured and reachable (cheap: list models).
  */
-import OpenAI from "openai";
+import Groq from "groq-sdk";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 const LOCAL_LLM_PROVIDER =
@@ -15,7 +15,7 @@ const LOCAL_LLM_BASE_URL =
   process.env.LOCAL_LLM_BASE_URL?.trim() ||
   process.env.OLLAMA_BASE_URL?.trim() ||
   "http://127.0.0.1:1234";
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 function normalizeOpenAiBaseUrl(base: string): string {
   const trimmed = base.replace(/\/+$/, "");
@@ -77,7 +77,6 @@ async function checkOllama(baseUrl: string): Promise<{ ok: boolean; error?: stri
     if (!res.ok) {
       return { ok: false, error: `HTTP ${res.status}` };
     }
-    // Response should be JSON; we just need to know Ollama is reachable.
     await res.json().catch(() => null);
     return { ok: true };
   } catch (e) {
@@ -86,11 +85,10 @@ async function checkOllama(baseUrl: string): Promise<{ ok: boolean; error?: stri
   }
 }
 
-async function checkOpenAI(apiKey: string | undefined): Promise<{ ok: boolean; error?: string }> {
-  if (!apiKey) return { ok: false, error: "OPENAI_API_KEY not set" };
+async function checkGroq(apiKey: string | undefined): Promise<{ ok: boolean; error?: string }> {
+  if (!apiKey) return { ok: false, error: "GROQ_API_KEY not set" };
   try {
-    const client = new OpenAI({ apiKey });
-    // Cheap request to verify credentials/network.
+    const client = new Groq({ apiKey });
     await client.models.list();
     return { ok: true };
   } catch (e) {
@@ -99,15 +97,25 @@ async function checkOpenAI(apiKey: string | undefined): Promise<{ ok: boolean; e
   }
 }
 
+/** Local LM Studio / OpenAI-compatible server: probe /v1/models without the OpenAI npm package. */
 async function checkOpenAiCompatibleLocal(
   baseUrl: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const client = new OpenAI({
-      apiKey: process.env.LOCAL_LLM_API_KEY?.trim() || "local-llm",
-      baseURL: normalizeOpenAiBaseUrl(baseUrl),
+    const url = `${normalizeOpenAiBaseUrl(baseUrl)}/models`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${process.env.LOCAL_LLM_API_KEY?.trim() || "local-llm"}`,
+      },
     });
-    await client.models.list();
+    clearTimeout(timer);
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status}` };
+    }
+    await res.json().catch(() => null);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -136,19 +144,19 @@ export default async function handler(
 
   const localEnabled = resolveUseLocalLlm(req);
   const localProvider = resolveLocalLlmProvider(req);
-  const openaiEnabled = Boolean(OPENAI_API_KEY);
+  const groqEnabled = Boolean(GROQ_API_KEY);
 
-  const [localRes, openaiRes] = await Promise.all([
+  const [localRes, groqRes] = await Promise.all([
     localEnabled
       ? localProvider === "openai_compatible"
         ? checkOpenAiCompatibleLocal(LOCAL_LLM_BASE_URL)
         : checkOllama(LOCAL_LLM_BASE_URL)
       : Promise.resolve({ ok: false, error: undefined } as const),
-    checkOpenAI(OPENAI_API_KEY),
+    checkGroq(GROQ_API_KEY),
   ]);
 
-  const llmOk = (localEnabled && localRes.ok) || openaiRes.ok;
-  const source = (localEnabled && localRes.ok) ? "local" : openaiRes.ok ? "openai" : "none";
+  const llmOk = (localEnabled && localRes.ok) || groqRes.ok;
+  const source = (localEnabled && localRes.ok) ? "local" : groqRes.ok ? "groq" : "none";
 
   res.status(200).json({
     backend: { ok: backendOk },
@@ -161,8 +169,7 @@ export default async function handler(
         ok: localRes.ok,
         error: localRes.error,
       },
-      openai: { enabled: openaiEnabled, ok: openaiRes.ok, error: openaiRes.error },
+      groq: { enabled: groqEnabled, ok: groqRes.ok, error: groqRes.error },
     },
   });
 }
-

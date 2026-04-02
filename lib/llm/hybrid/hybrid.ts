@@ -17,7 +17,7 @@ function normalizeOpenAiBaseUrl(base: string): string {
 /**
  * Robust hybrid converter:
  * - Try LOCAL LLM (Ollama) first if USE_LOCAL_LLM=true
- * - If local fails (network/timeout/JSON/validation), fall back to API (OpenAI)
+ * - If local fails (network/timeout/JSON/validation), fall back to Groq API
  * - If both fail, throw a clear error
  */
 export async function convertOCRToRecipeHybrid(
@@ -43,7 +43,7 @@ export async function convertOCRToRecipeHybridWithMode(
       ? "openai_compatible"
       : "ollama") as "ollama" | "openai_compatible");
 
-  const openaiModel = process.env.OPENAI_MODEL ?? "gpt-4.1";
+  const groqModel = process.env.GROQ_MODEL ?? "llama3-70b-8192";
 
   const localBaseUrl =
     process.env.LOCAL_LLM_BASE_URL?.trim() ||
@@ -89,19 +89,29 @@ export async function convertOCRToRecipeHybridWithMode(
   try {
     console.info("Falling back to API");
     const recipe = await convertOCRToRecipeHybridApi(ocrText, {
-      model: openaiModel,
+      model: groqModel,
       maxRetries: 2,
     });
     return { recipe, source: "api" };
   } catch (apiErr) {
     console.error("Both failed");
 
-    const localMsg =
-      localErr instanceof Error ? localErr.message : String(localErr);
+    const localMsg = !useLocal
+      ? "skipped (USE_LOCAL_LLM is not enabled)"
+      : localErr instanceof Error
+        ? localErr.message
+        : localErr != null
+          ? String(localErr)
+          : "unknown";
+
     const apiMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    const quotaHint =
+      /\b429\b|quota|rate limit/i.test(apiMsg)
+        ? " Groq rate limits or quota: check https://console.groq.com/"
+        : "";
 
     throw new Error(
-      `convertOCRToRecipeHybrid: Both failed. Local error: ${localMsg}. API error: ${apiMsg}`,
+      `convertOCRToRecipeHybrid: Both failed. Local: ${localMsg}. Groq: ${apiMsg}.${quotaHint}`,
     );
   }
 }

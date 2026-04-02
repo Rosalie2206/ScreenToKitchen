@@ -45,7 +45,7 @@ export class RecipeApiError extends Error {
 
 /**
  * Calls POST /api/recipe with OCR text and returns the structured recipe.
- * Does not send secrets — the OpenAI key stays on the server.
+ * Does not send secrets — the Groq key stays on the server.
  */
 export async function fetchRecipe(ocrText: string): Promise<Recipe> {
   const trimmed = ocrText.trim();

@@ -121,12 +121,14 @@ function renderMenuHeader() {
 function renderHome() {
   revokeImage();
   lastConverterRecipe = null;
-  document.title = "ScreenToKitchen";
+  document.title = "Screen To Kitchen";
 
   app.innerHTML = `
     <main class="shell">
       ${renderMenuHeader()}
-      <p class="lede">This is a Progressive Web App. Install it from the browser menu for an app-like experience.</p>
+      <figure class="home-hero-art-wrap" aria-hidden="true">
+        <img class="home-hero-art" src="${import.meta.env.BASE_URL}home-cheese.png" alt="" />
+      </figure>
 
       <section class="upload" aria-label="Upload a picture">
         <h2 class="upload-heading">Picture</h2>
@@ -139,7 +141,6 @@ function renderHome() {
         </div>
       </section>
 
-      <p class="hint footer-hint">GitHub Pages serves static files only — this is not an App Store or Play Store binary.</p>
     </main>
   `;
 
@@ -182,7 +183,7 @@ async function checkHealthUI() {
     const llmMode = health.llm?.source ?? "none";
     setBackend(Boolean(health.backend?.ok), "Online");
     if (health.llm?.ok) {
-      setLlm(true, health.llm.source === "local" ? "Local LLM OK" : "OpenAI OK");
+      setLlm(true, health.llm.source === "local" ? "Local LLM OK" : "Groq OK");
       if (detailsEl) {
         detailsEl.textContent = `Ping URL: ${pingUrl} · LLM mode: ${llmMode}`;
       }
@@ -192,12 +193,12 @@ async function checkHealthUI() {
           ? "LLM unavailable"
           : health.llm?.source === "local"
             ? "Local LLM failed"
-            : "OpenAI unavailable";
+            : "Groq unavailable";
       setLlm(false, why);
       if (detailsEl) {
         const localErr = health.llm.local?.error ? `Local: ${health.llm.local.error}` : "";
-        const openaiErr = health.llm.openai?.error ? `OpenAI: ${health.llm.openai.error}` : "";
-        const combined = [localErr, openaiErr].filter(Boolean).join(" · ");
+        const groqErr = health.llm.groq?.error ? `Groq: ${health.llm.groq.error}` : "";
+        const combined = [localErr, groqErr].filter(Boolean).join(" · ");
         detailsEl.textContent = `Ping URL: ${pingUrl} · LLM mode: ${llmMode}${combined ? ` · ${combined}` : " · No error details available."}`;
       }
     }
