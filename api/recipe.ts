@@ -7,6 +7,10 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { ParsedRecipe } from "../lib/llm/schema.js";
 import type { Recipe } from "../types/recipe.js";
 import { convertOCRToRecipeHybrid } from "../lib/llm/hybrid/hybrid.js";
+import {
+  parseLocalLlmProviderFromRequest,
+  type LocalLlmWireFormat,
+} from "../lib/llm/localProviderMode.js";
 
 function messageFromUnknown(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message || fallback;
@@ -61,17 +65,12 @@ function resolveUseLocalLlm(req: VercelRequest): boolean {
   return process.env.USE_LOCAL_LLM?.trim().toLowerCase() === "true";
 }
 
-function resolveLocalLlmProvider(req: VercelRequest): "ollama" | "openai_compatible" {
-  const headerValue = req.headers["x-local-llm-provider"];
-  const fromHeader = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-  const normalized = String(fromHeader ?? req.query.localProvider ?? "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "openai_compatible") return "openai_compatible";
-  if (normalized === "ollama") return "ollama";
-  return process.env.LOCAL_LLM_PROVIDER?.trim().toLowerCase() === "openai_compatible"
-    ? "openai_compatible"
-    : "ollama";
+function resolveLocalLlmProvider(req: VercelRequest): LocalLlmWireFormat {
+  return parseLocalLlmProviderFromRequest(
+    req.headers["x-local-llm-provider"],
+    req.query.localProvider,
+    process.env.LOCAL_LLM_PROVIDER,
+  );
 }
 
 /**

@@ -85,7 +85,7 @@ The home page calls a health endpoint and shows:
 The app supports two local provider styles:
 
 1. **Ollama-style**
-2. **OpenAI-compatible local server** (example: LM Studio style endpoint)
+2. **Chat Completions–compatible local server** (example: LM Studio `/v1` endpoint)
 
 This is controlled with environment variables.
 

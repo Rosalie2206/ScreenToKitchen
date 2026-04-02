@@ -38,7 +38,7 @@ The **Tech Kitchen → Health check** page uses `/api/health` and will show:
 ## LLM mode (hybrid)
 The backend converts OCR text using:
 
-- **Local** (Ollama or OpenAI-compatible server) first, if enabled
+- **Local** (Ollama, or a Chat Completions `/v1` server such as LM Studio) first, if enabled
 - **Groq** fallback (cloud, fast inference)
 
 Environment variables (set them for `vercel dev` / Vercel):
@@ -47,12 +47,12 @@ Environment variables (set them for `vercel dev` / Vercel):
 - `GROQ_MODEL` — optional (default `llama3-70b-8192`)
 - `GROQ_BASE_URL` — optional override (rare)
 - `USE_LOCAL_LLM` = `"true"` to try local LLM first (`"false"` skips local and uses Groq only)
-- `LOCAL_LLM_PROVIDER` = `ollama` (default) or `openai_compatible`
+- `LOCAL_LLM_PROVIDER` = `ollama` (default), `compatible` (Chat Completions / LM Studio), or `openai_compatible` (same as `compatible`, legacy name)
 - `LOCAL_LLM_BASE_URL` = local server base URL (default `http://127.0.0.1:1234`)
 - `OLLAMA_BASE_URL` = legacy alias for local base URL (still supported)
 - `OLLAMA_MODEL` = default `mistral`
-- `LOCAL_LLM_MODEL` = local model name override (e.g. `openai/gpt-oss-20b`)
-- `LOCAL_LLM_API_KEY` = optional key for OpenAI-compatible local servers (defaults to `local-llm`)
+- `LOCAL_LLM_MODEL` = local model id as shown in your tool (e.g. `openai/gpt-oss-20b` in LM Studio)
+- `LOCAL_LLM_API_KEY` = optional bearer token for local `/v1` servers (defaults to `local-llm`)
 - `LOCAL_LLM_TIMEOUT_MS` = default `10000`
 
 ### Example local LLM setup (Ollama-style)
@@ -65,10 +65,10 @@ export LOCAL_LLM_BASE_URL="http://127.0.0.1:1234"
 export LOCAL_LLM_MODEL="mistral"
 ```
 
-### Example local LLM setup (OpenAI-compatible, e.g. LM Studio)
+### Example local LLM setup (LM Studio / Chat Completions)
 ```bash
 export USE_LOCAL_LLM="true"
-export LOCAL_LLM_PROVIDER="openai_compatible"
+export LOCAL_LLM_PROVIDER="compatible"
 export LOCAL_LLM_BASE_URL="http://127.0.0.1:1234"
 export LOCAL_LLM_MODEL="openai/gpt-oss-20b"
 export LOCAL_LLM_API_KEY="local-llm"

@@ -1,6 +1,10 @@
 import { convertOCRToRecipeHybridLocal } from "./local.js";
 import { convertOCRToRecipeHybridApi } from "./api.js";
 import type { Recipe } from "../types.js";
+import {
+  parseLocalLlmProviderFromEnv,
+  type LocalLlmWireFormat,
+} from "../localProviderMode.js";
 
 type HybridModeSource = "local" | "api";
 
@@ -8,13 +12,13 @@ function isTrueEnv(v: string | undefined): boolean {
   return v?.trim().toLowerCase() === "true";
 }
 
-function normalizeOpenAiBaseUrl(base: string): string {
+function normalizeLocalV1BaseUrl(base: string): string {
   const trimmed = base.replace(/\/+$/, "");
   if (trimmed.endsWith("/v1")) return trimmed;
   return `${trimmed}/v1`;
 }
 
-/** Upstream libraries sometimes embed OpenAI doc URLs; this app uses Groq for cloud fallback. */
+/** Strip misleading vendor doc URLs from upstream error strings (cloud path uses Groq). */
 function sanitizeCloudErrorMessage(msg: string): string {
   return msg.replace(
     /https:\/\/platform\.openai\.com\/[^\s)]+/gi,
@@ -30,7 +34,7 @@ function sanitizeCloudErrorMessage(msg: string): string {
  */
 export async function convertOCRToRecipeHybrid(
   ocrText: string,
-  options?: { useLocalLlm?: boolean; localProvider?: "ollama" | "openai_compatible" },
+  options?: { useLocalLlm?: boolean; localProvider?: LocalLlmWireFormat },
 ): Promise<Recipe> {
   const { recipe } = await convertOCRToRecipeHybridWithMode(ocrText, options);
   return recipe;
@@ -41,15 +45,13 @@ export async function convertOCRToRecipeHybrid(
  */
 export async function convertOCRToRecipeHybridWithMode(
   ocrText: string,
-  options?: { useLocalLlm?: boolean; localProvider?: "ollama" | "openai_compatible" },
+  options?: { useLocalLlm?: boolean; localProvider?: LocalLlmWireFormat },
 ): Promise<{ recipe: Recipe; source: HybridModeSource }> {
   const useLocal = options?.useLocalLlm ?? isTrueEnv(process.env.USE_LOCAL_LLM);
   const timeoutMs = Number(process.env.LOCAL_LLM_TIMEOUT_MS ?? 10_000);
-  const localProvider =
+  const localProvider: LocalLlmWireFormat =
     options?.localProvider ??
-    ((process.env.LOCAL_LLM_PROVIDER?.trim().toLowerCase() === "openai_compatible"
-      ? "openai_compatible"
-      : "ollama") as "ollama" | "openai_compatible");
+    parseLocalLlmProviderFromEnv(process.env.LOCAL_LLM_PROVIDER);
 
   const groqModel = process.env.GROQ_MODEL ?? "llama3-70b-8192";
 
@@ -71,8 +73,8 @@ export async function convertOCRToRecipeHybridWithMode(
         localProvider === "openai_compatible"
           ? await convertOCRToRecipeHybridApi(ocrText, {
               model: localModel,
-              baseURL: normalizeOpenAiBaseUrl(localBaseUrl),
-              // Most OpenAI-compatible local servers accept any non-empty key.
+              baseURL: normalizeLocalV1BaseUrl(localBaseUrl),
+              // Local Chat Completions servers typically accept any non-empty bearer token.
               apiKey: process.env.LOCAL_LLM_API_KEY?.trim() || "local-llm",
               maxRetries: 2,
             })

@@ -110,7 +110,7 @@ async function callModelAndParse(
 function pickJsonMode(baseURL: string | undefined): "json_object" | "text" {
   const b = (baseURL ?? "").trim().toLowerCase();
   if (!b) return "json_object";
-  // Local OpenAI-compatible servers often reject json_object mode.
+  // Local /v1 Chat Completions servers often reject json_object mode.
   if (b.includes("127.0.0.1") || b.includes("localhost")) return "text";
   return "json_object";
 }

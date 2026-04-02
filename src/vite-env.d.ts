@@ -5,7 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
   /** Optional per-request override for local-first mode sent as x-use-local-llm. */
   readonly VITE_USE_LOCAL_LLM?: string;
-  /** Optional per-request override for local provider: "ollama" or "openai_compatible". */
+  /** Optional per-request override for local provider: ollama | compatible | openai_compatible (legacy). */
   readonly VITE_LOCAL_LLM_PROVIDER?: string;
 }
 

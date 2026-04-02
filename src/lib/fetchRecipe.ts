@@ -27,7 +27,7 @@ function resolveLocalLlmProviderOverride(): string | undefined {
   const raw = import.meta.env.VITE_LOCAL_LLM_PROVIDER;
   if (raw == null) return undefined;
   const v = String(raw).trim().toLowerCase();
-  if (v === "openai_compatible" || v === "ollama") return v;
+  if (v === "openai_compatible" || v === "compatible" || v === "ollama") return v;
   return undefined;
 }
 

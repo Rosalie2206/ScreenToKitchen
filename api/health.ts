@@ -3,21 +3,24 @@
  *
  * Lightweight health check for the frontend:
  * - Backend handler is reachable if this route responds.
- * - Checks whether local Ollama / OpenAI-compatible server is reachable (optional).
+ * - Checks whether local Ollama or Chat Completions–compatible (/v1) server is reachable (optional).
  * - Checks whether Groq credentials are configured and reachable (cheap: list models).
  */
 import Groq from "groq-sdk";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import {
+  parseLocalLlmProviderFromRequest,
+  type LocalLlmWireFormat,
+} from "../lib/llm/localProviderMode.js";
 
-const LOCAL_LLM_PROVIDER =
-  process.env.LOCAL_LLM_PROVIDER?.trim().toLowerCase() ?? "ollama";
 const LOCAL_LLM_BASE_URL =
   process.env.LOCAL_LLM_BASE_URL?.trim() ||
   process.env.OLLAMA_BASE_URL?.trim() ||
   "http://127.0.0.1:1234";
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-function normalizeOpenAiBaseUrl(base: string): string {
+/** Base URL for local servers exposing Chat Completions `/v1/*` routes (e.g. LM Studio). */
+function normalizeLocalV1BaseUrl(base: string): string {
   const trimmed = base.replace(/\/+$/, "");
   if (trimmed.endsWith("/v1")) return trimmed;
   return `${trimmed}/v1`;
@@ -55,17 +58,12 @@ function resolveUseLocalLlm(req: VercelRequest): boolean {
   return process.env.USE_LOCAL_LLM?.trim().toLowerCase() === "true";
 }
 
-function resolveLocalLlmProvider(req: VercelRequest): "ollama" | "openai_compatible" {
-  const headerValue = req.headers["x-local-llm-provider"];
-  const fromHeader = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-  const normalized = String(fromHeader ?? req.query.localProvider ?? "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "openai_compatible") return "openai_compatible";
-  if (normalized === "ollama") return "ollama";
-  return process.env.LOCAL_LLM_PROVIDER?.trim().toLowerCase() === "openai_compatible"
-    ? "openai_compatible"
-    : "ollama";
+function resolveLocalLlmProvider(req: VercelRequest): LocalLlmWireFormat {
+  return parseLocalLlmProviderFromRequest(
+    req.headers["x-local-llm-provider"],
+    req.query.localProvider,
+    process.env.LOCAL_LLM_PROVIDER,
+  );
 }
 
 async function checkOllama(baseUrl: string): Promise<{ ok: boolean; error?: string }> {
@@ -97,12 +95,12 @@ async function checkGroq(apiKey: string | undefined): Promise<{ ok: boolean; err
   }
 }
 
-/** Local LM Studio / OpenAI-compatible server: probe /v1/models without the OpenAI npm package. */
-async function checkOpenAiCompatibleLocal(
+/** Local LM Studio–style server: GET /v1/models via fetch (no extra SDK). */
+async function checkLocalChatCompletionsServer(
   baseUrl: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const url = `${normalizeOpenAiBaseUrl(baseUrl)}/models`;
+    const url = `${normalizeLocalV1BaseUrl(baseUrl)}/models`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(url, {
@@ -149,7 +147,7 @@ export default async function handler(
   const [localRes, groqRes] = await Promise.all([
     localEnabled
       ? localProvider === "openai_compatible"
-        ? checkOpenAiCompatibleLocal(LOCAL_LLM_BASE_URL)
+        ? checkLocalChatCompletionsServer(LOCAL_LLM_BASE_URL)
         : checkOllama(LOCAL_LLM_BASE_URL)
       : Promise.resolve({ ok: false, error: undefined } as const),
     checkGroq(GROQ_API_KEY),
