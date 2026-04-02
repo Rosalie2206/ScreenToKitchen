@@ -44,7 +44,7 @@ The backend converts OCR text using:
 Environment variables (set them for `vercel dev` / Vercel):
 
 - `GROQ_API_KEY` — **required** for cloud conversion and health check of Groq
-- `GROQ_MODEL` — optional (default `llama3-70b-8192`)
+- `GROQ_MODEL` — optional (default `llama-3.1-70b-versatile`; on failure, cloud requests retry once with `llama-3.1-8b-instant`)
 - `GROQ_BASE_URL` — optional override (rare)
 - `USE_LOCAL_LLM` = `"true"` to try local LLM first (`"false"` skips local and uses Groq only)
 - `LOCAL_LLM_PROVIDER` = `ollama` (default), `compatible` (Chat Completions / LM Studio), or `openai_compatible` (same as `compatible`, legacy name)

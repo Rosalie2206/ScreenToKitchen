@@ -1,5 +1,8 @@
 import Groq from "groq-sdk";
-import type { ChatCompletionMessageParam } from "groq-sdk/resources/chat/completions";
+import type {
+  ChatCompletion,
+  ChatCompletionMessageParam,
+} from "groq-sdk/resources/chat/completions";
 import { ZodError } from "zod";
 import type { ConvertOcrOptions, Recipe } from "./types.js";
 import {
@@ -12,10 +15,85 @@ import {
   buildUserPrompt,
   buildRepairPrompt,
 } from "./prompts.js";
+import { GROQ_MODEL, GROQ_FALLBACK_MODEL } from "./groqModelConfig.js";
 
-/** Default Groq chat model for recipe JSON extraction */
-const DEFAULT_MODEL = "llama3-70b-8192";
 const DEFAULT_MAX_RETRIES = 3;
+
+/**
+ * True when requests go to Groq Cloud (primary→fallback retry only applies there;
+ * local OpenAI-compatible servers use unrelated model IDs).
+ */
+function isGroqCloudBaseURL(baseURL: string | undefined): boolean {
+  const b = (baseURL ?? "").trim().toLowerCase();
+  if (!b) return true;
+  return b.includes("groq.com");
+}
+
+/**
+ * Detects Groq errors where switching models may help (decommissioned model, invalid id, etc.).
+ */
+function isGroqModelAvailabilityError(err: unknown): boolean {
+  if (err == null || typeof err !== "object") return false;
+  const e = err as {
+    status?: number;
+    message?: string;
+    code?: string;
+    error?: { message?: string; code?: string };
+  };
+  const status = e.status;
+  const code = String(e.code ?? e.error?.code ?? "");
+  const msg = `${e.message ?? ""} ${e.error?.message ?? ""} ${code}`.toLowerCase();
+
+  if (code === "model_decommissioned" || /model_decommissioned/i.test(msg)) {
+    return true;
+  }
+  if (/decommission|invalid model|unknown model|model.*not found|no such model/i.test(msg)) {
+    return true;
+  }
+  if (status === 400 || status === 404) {
+    if (/model/.test(msg)) return true;
+  }
+  return false;
+}
+
+/**
+ * One chat completion; on Groq Cloud, retries once with {@link GROQ_FALLBACK_MODEL} if the primary fails with a model-availability error.
+ */
+async function runChatCompletion(
+  client: Groq,
+  primaryModel: string,
+  messages: ChatCompletionMessageParam[],
+  jsonMode: "json_object" | "text",
+  allowModelFallback: boolean,
+): Promise<{ completion: ChatCompletion; modelUsed: string }> {
+  const baseBody = {
+    model: primaryModel,
+    temperature: 0.2,
+    messages,
+    ...(jsonMode === "json_object"
+      ? { response_format: { type: "json_object" as const } }
+      : {}),
+  };
+
+  try {
+    const completion = await client.chat.completions.create(baseBody);
+    return { completion, modelUsed: primaryModel };
+  } catch (err) {
+    if (
+      !allowModelFallback ||
+      primaryModel === GROQ_FALLBACK_MODEL ||
+      !isGroqModelAvailabilityError(err)
+    ) {
+      throw err;
+    }
+    console.warn("Primary model unavailable, switching to fallback");
+    const completion = await client.chat.completions.create({
+      ...baseBody,
+      model: GROQ_FALLBACK_MODEL,
+    });
+    return { completion, modelUsed: GROQ_FALLBACK_MODEL };
+  }
+}
 
 /**
  * Heuristic OCR quality score (bonus when model omits confidence).
@@ -56,15 +134,15 @@ async function callModelAndParse(
   attempt: number,
   maxRetries: number,
   jsonMode: "json_object" | "text",
+  allowModelFallback: boolean,
 ): Promise<Recipe> {
-  const completion = await client.chat.completions.create({
+  const { completion, modelUsed } = await runChatCompletion(
+    client,
     model,
-    temperature: 0.2,
     messages,
-    ...(jsonMode === "json_object"
-      ? { response_format: { type: "json_object" } }
-      : {}),
-  });
+    jsonMode,
+    allowModelFallback,
+  );
 
   const raw = completion.choices[0]?.message?.content;
   if (!raw) {
@@ -96,13 +174,15 @@ async function callModelAndParse(
       { role: "user", content: repairUser },
     ];
 
+    // Keep the same model that succeeded for the initial parse attempt; do not re-run primary→fallback.
     return callModelAndParse(
       client,
-      model,
+      modelUsed,
       repairMessages,
       attempt + 1,
       maxRetries,
       jsonMode,
+      false,
     );
   }
 }
@@ -202,17 +282,26 @@ export async function convertOCRToRecipe(
   }
 
   const client = getClient(options);
-  const model = options.model ?? process.env.GROQ_MODEL ?? DEFAULT_MODEL;
+  const model = options.model ?? GROQ_MODEL;
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
   const effectiveBaseURL = options.baseURL ?? process.env.GROQ_BASE_URL;
   const jsonMode = pickJsonMode(effectiveBaseURL);
+  const allowModelFallback = isGroqCloudBaseURL(effectiveBaseURL);
 
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: buildUserPrompt(trimmed) },
   ];
 
-  let recipe = await callModelAndParse(client, model, messages, 1, maxRetries, jsonMode);
+  let recipe = await callModelAndParse(
+    client,
+    model,
+    messages,
+    1,
+    maxRetries,
+    jsonMode,
+    allowModelFallback,
+  );
 
   if (recipe.confidence == null) {
     recipe = {

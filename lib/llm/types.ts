@@ -31,7 +31,7 @@ export type ConvertOcrOptions = {
   apiKey?: string;
   /** Optional Groq API base URL override */
   baseURL?: string;
-  /** Groq model id (e.g. llama3-70b-8192) */
+  /** Groq model id (e.g. llama-3.1-70b-versatile) */
   model?: string;
   /** Retries when the model returns invalid JSON or validation fails (default 3) */
   maxRetries?: number;

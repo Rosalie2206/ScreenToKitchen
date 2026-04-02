@@ -5,6 +5,7 @@ import {
   parseLocalLlmProviderFromEnv,
   type LocalLlmWireFormat,
 } from "../localProviderMode.js";
+import { GROQ_MODEL } from "../groqModelConfig.js";
 
 type HybridModeSource = "local" | "api";
 
@@ -53,7 +54,7 @@ export async function convertOCRToRecipeHybridWithMode(
     options?.localProvider ??
     parseLocalLlmProviderFromEnv(process.env.LOCAL_LLM_PROVIDER);
 
-  const groqModel = process.env.GROQ_MODEL ?? "llama3-70b-8192";
+  const groqModel = GROQ_MODEL;
 
   const localBaseUrl =
     process.env.LOCAL_LLM_BASE_URL?.trim() ||
