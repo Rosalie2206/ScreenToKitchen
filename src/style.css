@@ -77,6 +77,40 @@ h1 {
   gap: 0.75rem;
 }
 
+.home-header__actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.home-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.3rem;
+  min-width: 2.3rem;
+  height: 2.3rem;
+  padding: 0 0.45rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent);
+  background: color-mix(in srgb, var(--color-bg) 55%, #fff 45%);
+  color: var(--color-text);
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.home-nav-icon:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+
+.home-nav-icon__img {
+  width: 1.3rem;
+  height: 1.3rem;
+  object-fit: contain;
+  display: block;
+}
+
 .home-brand {
   display: inline-flex;
   align-items: center;
@@ -93,6 +127,139 @@ h1 {
 
 .home-title {
   margin: 0 0 0.5rem;
+}
+
+/* Home route only: centered brand row (logo + title), larger logo/type; actions stay top-right */
+.shell--home {
+  text-align: center;
+}
+
+.shell--home .home-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 0.5rem;
+}
+
+.shell--home .home-brand {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+  flex-direction: row;
+  align-items: center;
+  text-align: center;
+  gap: 0.65rem;
+}
+
+.shell--home .home-header__actions {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  align-self: start;
+}
+
+.shell--home .home-title {
+  margin: 0;
+  font-size: clamp(2rem, 5.5vw, 3rem);
+  line-height: 1.1;
+}
+
+.shell--home .home-logo {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.shell--home .upload-controls {
+  justify-content: center;
+}
+
+/* Non-home: smaller app header + icons; page title (e.g. Converter) stands out; centered copy */
+main.shell:not(.shell--home) {
+  text-align: center;
+}
+
+main.shell:not(.shell--home) .home-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+main.shell:not(.shell--home) .home-brand {
+  min-width: 0;
+  text-align: left;
+}
+
+main.shell:not(.shell--home) .home-header__actions {
+  flex-shrink: 0;
+}
+
+main.shell:not(.shell--home) .home-logo {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+main.shell:not(.shell--home) .home-header .home-title {
+  margin: 0 0 0.2rem;
+  font-size: clamp(0.92rem, 2.5vw, 1.12rem);
+  line-height: 1.2;
+}
+
+main.shell:not(.shell--home) .home-nav-icon,
+main.shell:not(.shell--home) .home-menu__trigger {
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.32rem;
+  font-size: 1.12rem;
+}
+
+main.shell:not(.shell--home) .home-nav-icon__img,
+main.shell:not(.shell--home) .home-menu__icon {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+main.shell:not(.shell--home) h1:not(.home-title) {
+  font-size: clamp(1.85rem, 5.5vw, 2.45rem);
+  line-height: 1.12;
+}
+
+main.shell:not(.shell--home) .tech-tabs {
+  justify-content: center;
+}
+
+main.shell:not(.shell--home) .upload-controls {
+  justify-content: center;
+}
+
+main.shell:not(.shell--home) .health-badge--na {
+  text-align: center;
+}
+
+main.shell:not(.shell--home) .home-menu__item {
+  justify-content: center;
+}
+
+main.shell:not(.shell--home) .catalogue-item {
+  align-items: center;
+}
+
+main.shell:not(.shell--home) .recipe-card {
+  text-align: center;
+}
+
+main.shell:not(.shell--home) .doc-prose ul,
+main.shell:not(.shell--home) .doc-prose ol {
+  display: inline-block;
+  text-align: left;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+main.shell:not(.shell--home) .doc-prose th,
+main.shell:not(.shell--home) .doc-prose td {
+  text-align: center;
 }
 
 .home-hero-art-wrap {
@@ -181,6 +348,10 @@ h1 {
 }
 
 .health-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 0.6rem;
+  row-gap: 0.5rem;
   margin: 0 0 1.5rem;
   padding: 0.95rem 1rem;
   border: 1px solid color-mix(in srgb, var(--color-text) 14%, transparent);
@@ -189,19 +360,39 @@ h1 {
   box-shadow: 0 3px 14px color-mix(in srgb, var(--color-text) 8%, transparent);
 }
 
-.health-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin: 0.35rem 0;
+.health-panel > .health-details {
+  grid-column: 1 / -1;
+  margin: 0.5rem 0 0;
 }
 
-.health-label {
+.health-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  text-align: center;
+}
+
+.health-cell__name {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  font-size: 1.05rem;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 1.02rem;
+  line-height: 1.25;
+}
+
+.health-cell__status {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.health-cell__status .health-badge {
+  max-width: 100%;
+  justify-content: center;
+  text-align: center;
 }
 
 .health-badge {
@@ -217,7 +408,6 @@ h1 {
 }
 
 .health-details {
-  margin: 0.6rem 0 0;
   color: color-mix(in srgb, var(--color-text) 75%, transparent);
   word-break: break-word;
 }
@@ -259,7 +449,7 @@ h1 {
   background: color-mix(in srgb, var(--color-text) 7%, transparent);
   white-space: normal;
   max-width: min(100%, 20rem);
-  text-align: right;
+  text-align: center;
 }
 
 .shell--behind {
@@ -272,8 +462,15 @@ h1 {
 
 .behind-title {
   margin: 0 0 0.35rem;
-  padding-right: 5.5rem;
   font-size: clamp(1.5rem, 4vw, 2rem);
+}
+
+.shell--behind .behind-title {
+  margin-bottom: 0.5rem;
+}
+
+.shell--behind .behind-title + .tech-tabs {
+  margin: 0 0 1rem;
 }
 
 .behind-lede {
@@ -449,7 +646,6 @@ h1 {
 
 .shell--converter h1 {
   margin-bottom: 0.35rem;
-  padding-right: 5.5rem;
 }
 
 .converter-lede {
@@ -458,30 +654,6 @@ h1 {
 
 .converter-empty {
   margin: 0 0 1rem;
-}
-
-.back-link {
-  display: inline-block;
-  margin-bottom: 1.25rem;
-  color: color-mix(in srgb, var(--color-text) 78%, transparent);
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-}
-
-.back-link--converter {
-  position: fixed;
-  top: max(1rem, env(safe-area-inset-top, 0px));
-  right: max(1rem, env(safe-area-inset-right, 0px));
-  z-index: 20;
-  margin: 0;
-  padding: 0.4rem 0.55rem;
-  background: color-mix(in srgb, var(--color-bg) 88%, #fff);
-  border-radius: 0.4rem;
-  box-shadow: 0 1px 6px color-mix(in srgb, var(--color-text) 12%, transparent);
-}
-
-.back-link:hover {
-  color: var(--color-text);
 }
 
 .converter-thumb-wrap {
@@ -568,7 +740,6 @@ h1 {
 
 .recipe-page-title {
   margin: 0 0 1rem;
-  padding-right: 5.5rem;
   font-size: clamp(1.5rem, 4vw, 2rem);
 }
 
@@ -584,7 +755,6 @@ h1 {
 
 .catalogue-title {
   margin: 0 0 0.35rem;
-  padding-right: 5.5rem;
   font-size: clamp(1.5rem, 4vw, 2rem);
 }
 
@@ -737,7 +907,42 @@ textarea {
     height: 1.95rem;
   }
 
+  main.shell:not(.shell--home) .home-logo {
+    width: 1.58rem;
+    height: 1.58rem;
+  }
+
+  main.shell:not(.shell--home) .home-nav-icon,
+  main.shell:not(.shell--home) .home-menu__trigger {
+    width: 1.85rem;
+    min-width: 1.85rem;
+    height: 1.85rem;
+    padding: 0 0.28rem;
+  }
+
+  main.shell:not(.shell--home) .home-nav-icon__img,
+  main.shell:not(.shell--home) .home-menu__icon {
+    width: 0.98rem;
+    height: 0.98rem;
+  }
+
+  .shell--home .home-logo {
+    width: 2.85rem;
+    height: 2.85rem;
+  }
+
+  .shell--home .home-title {
+    font-size: clamp(1.65rem, 7vw, 2.5rem);
+  }
+
   .home-menu__trigger {
+    width: 2.1rem;
+    min-width: 2.1rem;
+    height: 2.1rem;
+    padding: 0 0.3rem;
+  }
+
+  .home-nav-icon {
     width: 2.1rem;
     min-width: 2.1rem;
     height: 2.1rem;
@@ -749,14 +954,17 @@ textarea {
     right: 0;
   }
 
-  .health-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.35rem;
-  }
-
   .health-badge {
     white-space: normal;
+  }
+
+  .health-panel {
+    column-gap: 0.4rem;
+    padding: 0.85rem 0.65rem;
+  }
+
+  .health-cell__name {
+    font-size: 0.98rem;
   }
 
   .upload {

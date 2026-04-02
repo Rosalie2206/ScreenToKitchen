@@ -36,7 +36,7 @@ function parseRoute() {
   if (parts[0] === "converter") return { name: "converter" };
   if (parts[0] === "catalogue") return { name: "catalogue" };
   if (parts[0] === "tech-kitchen") {
-    const subtab = parts[1] ?? "behind-the-scenes";
+    const subtab = parts[1] ?? "health-check";
     if (subtab === "health-check") return { name: "tech-health" };
     return { name: "tech-behind" };
   }
@@ -103,17 +103,22 @@ function renderMenuHeader() {
         </a>
         <h1 class="home-title">Screen To Kitchen</h1>
       </div>
-      <details class="home-menu">
-        <summary class="home-menu__trigger" aria-label="Open menu">
-          <img class="home-menu__icon" src="${import.meta.env.BASE_URL}menu-icon.png" alt="" />
-        </summary>
-        <nav class="home-menu__panel" aria-label="Main menu">
-          <a class="home-menu__item" href="#/">Home</a>
-          <a class="home-menu__item" href="#/converter">Converter</a>
-          <a class="home-menu__item" href="#/catalogue">Catalogue</a>
-          <a class="home-menu__item" href="#/tech-kitchen/behind-the-scenes">Tech Kitchen</a>
-        </nav>
-      </details>
+      <div class="home-header__actions">
+        <a class="home-nav-icon" href="#/" aria-label="Home">
+          <img class="home-nav-icon__img" src="${import.meta.env.BASE_URL}home-icon.png" alt="" />
+        </a>
+        <details class="home-menu">
+          <summary class="home-menu__trigger" aria-label="Open menu">
+            <img class="home-menu__icon" src="${import.meta.env.BASE_URL}menu-icon.png" alt="" />
+          </summary>
+          <nav class="home-menu__panel" aria-label="Main menu">
+            <a class="home-menu__item" href="#/">Home</a>
+            <a class="home-menu__item" href="#/converter">Converter</a>
+            <a class="home-menu__item" href="#/catalogue">Catalogue</a>
+            <a class="home-menu__item" href="#/tech-kitchen/health-check">Tech Kitchen</a>
+          </nav>
+        </details>
+      </div>
     </div>
   `;
 }
@@ -124,7 +129,7 @@ function renderHome() {
   document.title = "ScreenToKitchen";
 
   app.innerHTML = `
-    <main class="shell">
+    <main class="shell shell--home">
       ${renderMenuHeader()}
       <figure class="home-hero-art-wrap" aria-hidden="true">
         <img class="home-hero-art" src="${import.meta.env.BASE_URL}home-cheese.png" alt="" />
@@ -283,8 +288,8 @@ async function checkHealthUI() {
 function renderTechKitchenTabs(active) {
   return `
     <nav class="tech-tabs" aria-label="Tech Kitchen tabs">
-      <a class="tech-tab ${active === "behind" ? "tech-tab--active" : ""}" href="#/tech-kitchen/behind-the-scenes">Behind the scenes</a>
       <a class="tech-tab ${active === "health" ? "tech-tab--active" : ""}" href="#/tech-kitchen/health-check">Health check</a>
+      <a class="tech-tab ${active === "behind" ? "tech-tab--active" : ""}" href="#/tech-kitchen/behind-the-scenes">Behind the scenes</a>
     </nav>
   `;
 }
@@ -294,7 +299,12 @@ function onFileSelected(event) {
   if (!file || !file.type.startsWith("image/")) return;
   revokeImage();
   imageObjectUrl = URL.createObjectURL(file);
+  const alreadyOnConverter = parseRoute().name === "converter";
   location.hash = "#/converter";
+  // Same-hash navigation does not fire `hashchange`; re-render when uploading from empty converter.
+  if (alreadyOnConverter) {
+    render();
+  }
 }
 
 function setConverterSaveState(recipe, enabled) {
@@ -467,11 +477,21 @@ function renderConverter() {
     app.innerHTML = `
       <main class="shell shell--converter">
         ${renderMenuHeader()}
-        <a href="#/" class="back-link back-link--converter">← Back</a>
         <h1>Converter</h1>
-        <p class="hint converter-empty">No picture loaded. Upload one from the home screen.</p>
+        <p class="hint converter-empty">No picture loaded yet.</p>
+        <section class="upload" aria-label="Upload a picture">
+          <h2 class="upload-heading">Picture</h2>
+          <p class="upload-hint hint">Choose from your gallery or take a new photo.</p>
+          <div class="upload-controls">
+            <label class="upload-button">
+              <input type="file" class="upload-input" accept="image/*" />
+              <span class="upload-button-label">Choose photo</span>
+            </label>
+          </div>
+        </section>
       </main>
     `;
+    app.querySelector(".upload-input").addEventListener("change", onFileSelected);
     return;
   }
 
@@ -482,7 +502,6 @@ function renderConverter() {
   app.innerHTML = `
     <main class="shell shell--converter">
       ${renderMenuHeader()}
-      <a href="#/" class="back-link back-link--converter">← Back</a>
       <h1>Converter</h1>
       <p class="lede converter-lede">Uploaded picture</p>
       <figure class="converter-thumb-wrap">
@@ -530,7 +549,6 @@ function renderCataloguePage() {
     app.innerHTML = `
       <main class="shell shell--catalogue">
         ${renderMenuHeader()}
-        <a href="#/" class="back-link back-link--converter">← Home</a>
         <h1 class="catalogue-title">Catalogue</h1>
         <p class="hint converter-empty">No saved recipes yet. Use Converter to read a recipe from a photo, then tap Save recipe.</p>
       </main>
@@ -552,7 +570,6 @@ function renderCataloguePage() {
   app.innerHTML = `
     <main class="shell shell--catalogue">
       ${renderMenuHeader()}
-      <a href="#/" class="back-link back-link--converter">← Home</a>
       <h1 class="catalogue-title">Catalogue</h1>
       <p class="lede catalogue-lede">Saved recipes</p>
       <ul class="catalogue-list">
@@ -570,7 +587,6 @@ function renderRecipePage(recipeId) {
     app.innerHTML = `
       <main class="shell shell--recipe">
         ${renderMenuHeader()}
-        <a href="#/catalogue" class="back-link back-link--converter">← Catalogue</a>
         <h1 class="recipe-page-title">Recipe</h1>
         <p class="hint converter-empty">This recipe was not found. It may have been removed or the link is invalid.</p>
       </main>
@@ -584,7 +600,6 @@ function renderRecipePage(recipeId) {
   app.innerHTML = `
     <main class="shell shell--recipe">
       ${renderMenuHeader()}
-      <a href="#/catalogue" class="back-link back-link--converter">← Catalogue</a>
       <h1 class="recipe-page-title">Saved recipe</h1>
       <div class="recipe-page-root">${buildRecipeCardHtml(recipe)}</div>
     </main>
@@ -604,8 +619,8 @@ function renderBehindTheScenes() {
   app.innerHTML = `
     <main class="shell shell--behind">
       ${renderMenuHeader()}
-      ${renderTechKitchenTabs("behind")}
       <h1 class="behind-title">Tech Kitchen</h1>
+      ${renderTechKitchenTabs("behind")}
       <p class="behind-lede lede">How this app works—in plain language.</p>
       <article class="doc-prose">${html}</article>
     </main>
@@ -617,30 +632,36 @@ function renderHealthCheckPage() {
   app.innerHTML = `
     <main class="shell shell--behind">
       ${renderMenuHeader()}
-      ${renderTechKitchenTabs("health")}
       <h1 class="behind-title">Tech Kitchen</h1>
+      ${renderTechKitchenTabs("health")}
       <p class="behind-lede lede">Live backend, local LLM, and Groq status.</p>
       <section class="health-panel" aria-label="System status">
-        <div class="health-row">
-          <div class="health-label">
+        <div class="health-cell">
+          <div class="health-cell__name">
             <span class="health-dot health-dot--bad health-dot-backend" aria-hidden="true"></span>
             Backend API
           </div>
-          <span class="health-badge health-badge--bad health-backend-badge">Checking…</span>
+          <div class="health-cell__status">
+            <span class="health-badge health-badge--bad health-backend-badge">Checking…</span>
+          </div>
         </div>
-        <div class="health-row">
-          <div class="health-label">
+        <div class="health-cell">
+          <div class="health-cell__name">
             <span class="health-dot health-dot--bad health-dot-local" aria-hidden="true"></span>
             Local LLM
           </div>
-          <span class="health-badge health-badge--bad health-local-badge">Checking…</span>
+          <div class="health-cell__status">
+            <span class="health-badge health-badge--bad health-local-badge">Checking…</span>
+          </div>
         </div>
-        <div class="health-row">
-          <div class="health-label">
+        <div class="health-cell">
+          <div class="health-cell__name">
             <span class="health-dot health-dot--bad health-dot-groq" aria-hidden="true"></span>
             Groq API
           </div>
-          <span class="health-badge health-badge--bad health-groq-badge">Checking…</span>
+          <div class="health-cell__status">
+            <span class="health-badge health-badge--bad health-groq-badge">Checking…</span>
+          </div>
         </div>
         <p class="hint health-details">Loading status details…</p>
       </section>
