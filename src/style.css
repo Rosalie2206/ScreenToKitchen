@@ -876,6 +876,7 @@ main.shell:not(.shell--home) .upload-button .upload-button-label {
 }
 
 .save-recipe-btn {
+  touch-action: manipulation;
   min-height: 3.1rem;
   padding: 0.65rem 1.85rem;
   font-family: var(--font-playful);
@@ -907,6 +908,12 @@ main.shell:not(.shell--home) .upload-button .upload-button-label {
 .save-recipe-btn:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--color-brand) 45%, transparent);
   outline-offset: 3px;
+}
+
+.converter-save-error {
+  margin-top: 0.75rem;
+  text-align: center;
+  color: color-mix(in srgb, var(--color-brand) 35%, var(--color-text) 65%);
 }
 
 .shell--recipe {

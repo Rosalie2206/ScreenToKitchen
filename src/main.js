@@ -51,6 +51,16 @@ function revokeImage() {
 /**
  * @returns {{ name: 'home'|'converter'|'catalogue'|'recipe', recipeId?: string|null }}
  */
+/** Navigate to a saved recipe; re-renders if hash is already the target (Safari). */
+function navigateToRecipe(id) {
+  const target = `#/recipe/${id}`;
+  if (location.hash === target) {
+    void renderRecipePage(id);
+  } else {
+    location.hash = target;
+  }
+}
+
 function parseRoute() {
   const raw = location.hash.replace(/^#/, "").replace(/^\//, "");
   const parts = raw.split("/").filter(Boolean);
@@ -312,7 +322,7 @@ function setConverterSaveState(recipe, enabled, savedId) {
   } else if (savedId !== undefined) {
     lastConverterRecipeId = savedId;
   }
-  const btn = app.querySelector(".save-recipe-btn");
+  const btn = document.getElementById("save-recipe-btn");
   if (btn) {
     btn.disabled = !enabled;
   }
@@ -405,6 +415,11 @@ async function runConverterOcr(runId, imageUrl) {
   if (!statusEl || !outputWrap || !recipeRoot) return;
 
   setConverterSaveState(null, false);
+  const saveErr = document.getElementById("converter-save-error");
+  if (saveErr) {
+    saveErr.textContent = "";
+    saveErr.hidden = true;
+  }
 
   try {
     const { createWorker } = await import("tesseract.js");
@@ -517,25 +532,47 @@ function renderConverter() {
         </div>
       </section>
       <div class="converter-actions">
-        <button type="button" class="save-recipe-btn" disabled>${escapeHtml(t("saveRecipe"))}</button>
+        <button type="button" id="save-recipe-btn" class="save-recipe-btn" disabled>${escapeHtml(t("saveRecipe"))}</button>
       </div>
+      <p class="hint converter-save-error" id="converter-save-error" hidden></p>
     </main>
   `;
 
-  app.querySelector(".save-recipe-btn").addEventListener("click", async () => {
+  const saveErrEl = document.getElementById("converter-save-error");
+  function showSaveError(msg) {
+    if (!saveErrEl) return;
+    saveErrEl.textContent = msg;
+    saveErrEl.hidden = false;
+  }
+  function clearSaveError() {
+    if (!saveErrEl) return;
+    saveErrEl.textContent = "";
+    saveErrEl.hidden = true;
+  }
+
+  document.getElementById("save-recipe-btn")?.addEventListener("click", () => {
+    clearSaveError();
     const recipe = lastConverterRecipe;
     if (!recipe) return;
     if (lastConverterRecipeId) {
-      location.hash = `#/recipe/${lastConverterRecipeId}`;
+      navigateToRecipe(lastConverterRecipeId);
       return;
     }
-    try {
-      const { id } = await postRecipe(recipe);
-      lastConverterRecipeId = id;
-      location.hash = `#/recipe/${id}`;
-    } catch (e) {
-      console.error(e);
-    }
+    const plain = JSON.parse(JSON.stringify(recipe));
+    void (async () => {
+      try {
+        const { id } = await postRecipe(plain);
+        lastConverterRecipeId = id;
+        navigateToRecipe(id);
+      } catch (e) {
+        console.error(e);
+        const msg =
+          e && typeof e === "object" && "message" in e
+            ? String(/** @type {{ message?: string }} */ (e).message)
+            : String(e);
+        showSaveError(`${t("saveRecipeError")} ${msg}`);
+      }
+    })();
   });
 
   if (recipeToRestore) {

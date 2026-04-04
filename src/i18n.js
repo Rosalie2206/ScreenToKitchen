@@ -41,6 +41,7 @@ const STRINGS = {
     ocrReadFail:
       "Could not read text from this image. Check your connection and try again.",
     saveRecipe: "Save recipe",
+    saveRecipeError: "Could not save the recipe.",
     catalogueTitle: "Catalogue",
     catalogueEmpty:
       "No saved recipes yet. Use Converter to read a recipe from a photo, then tap Save recipe.",
@@ -129,6 +130,7 @@ const STRINGS = {
     ocrReadFail:
       "Kon geen tekst uit deze afbeelding lezen. Controleer je verbinding en probeer opnieuw.",
     saveRecipe: "Recept bewaren",
+    saveRecipeError: "Het recept kon niet worden bewaard.",
     catalogueTitle: "Catalogus",
     catalogueEmpty:
       "Nog geen bewaarde recepten. Gebruik de Converter om een recept van een foto te lezen en tik daarna op Recept bewaren.",
