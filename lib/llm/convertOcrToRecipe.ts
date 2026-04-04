@@ -4,18 +4,23 @@ import type {
   ChatCompletionMessageParam,
 } from "groq-sdk/resources/chat/completions";
 import { ZodError } from "zod";
-import type { ConvertOcrOptions, Recipe } from "./types.js";
+import type {
+  ConvertOcrOptions,
+  Recipe,
+  RecipeOutputLocale,
+} from "./types.js";
 import {
   parseRecipeJson,
   extractJsonPayload,
   type ParsedRecipe,
 } from "./schema.js";
 import {
-  SYSTEM_PROMPT,
+  buildSystemPrompt,
   buildUserPrompt,
   buildRepairPrompt,
 } from "./prompts.js";
 import { GROQ_MODEL, GROQ_FALLBACK_MODEL } from "./groqModelConfig.js";
+import { metricizeAllIngredients } from "./metricIngredients.js";
 
 const DEFAULT_MAX_RETRIES = 3;
 
@@ -135,6 +140,7 @@ async function callModelAndParse(
   maxRetries: number,
   jsonMode: "json_object" | "text",
   allowModelFallback: boolean,
+  locale: RecipeOutputLocale,
 ): Promise<Recipe> {
   const { completion, modelUsed } = await runChatCompletion(
     client,
@@ -167,7 +173,7 @@ async function callModelAndParse(
       );
     }
 
-    const repairUser = buildRepairPrompt(extractJsonPayload(raw), msg);
+    const repairUser = buildRepairPrompt(extractJsonPayload(raw), msg, locale);
     const repairMessages: ChatCompletionMessageParam[] = [
       ...messages,
       { role: "assistant", content: raw },
@@ -183,6 +189,7 @@ async function callModelAndParse(
       maxRetries,
       jsonMode,
       false,
+      locale,
     );
   }
 }
@@ -200,11 +207,13 @@ function pickJsonMode(baseURL: string | undefined): "json_object" | "text" {
  */
 function normalizeRecipe(r: ParsedRecipe): Recipe {
   const ingredients = mergeDuplicateIngredients(
-    r.ingredients.map((ing) => ({
-      name: ing.name.trim(),
-      quantity: ing.quantity,
-      unit: ing.unit?.trim() || null,
-    })),
+    metricizeAllIngredients(
+      r.ingredients.map((ing) => ({
+        name: ing.name.trim(),
+        quantity: ing.quantity,
+        unit: ing.unit?.trim() || null,
+      })),
+    ),
   );
 
   return {
@@ -287,10 +296,12 @@ export async function convertOCRToRecipe(
   const effectiveBaseURL = options.baseURL ?? process.env.GROQ_BASE_URL;
   const jsonMode = pickJsonMode(effectiveBaseURL);
   const allowModelFallback = isGroqCloudBaseURL(effectiveBaseURL);
+  const locale: RecipeOutputLocale =
+    options.outputLocale === "nl" ? "nl" : "en";
 
   const messages: ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: buildUserPrompt(trimmed) },
+    { role: "system", content: buildSystemPrompt(locale) },
+    { role: "user", content: buildUserPrompt(trimmed, locale) },
   ];
 
   let recipe = await callModelAndParse(
@@ -301,6 +312,7 @@ export async function convertOCRToRecipe(
     maxRetries,
     jsonMode,
     allowModelFallback,
+    locale,
   );
 
   if (recipe.confidence == null) {

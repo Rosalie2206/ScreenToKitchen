@@ -1,11 +1,11 @@
-# ScreenToKitchen
+# Scroll Cook Repeat
 
 Progressive Web App (Vite) configured for **GitHub Pages** at  
 `https://<your-username>.github.io/ScreenToKitchen/` (set `VITE_BASE_PATH` when building).
 
 ## Local development
 
-ScreenToKitchen has:
+Scroll Cook Repeat has:
 - a Vite frontend (`src/`)
 - a local/serverless backend (`api/recipe.ts`, `api/health.ts`)
 

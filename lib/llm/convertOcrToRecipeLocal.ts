@@ -8,6 +8,8 @@
  */
 
 import { parseRecipeJson } from "./schema.js";
+import { metricizeAllIngredients } from "./metricIngredients.js";
+import type { RecipeOutputLocale } from "./types.js";
 
 const DEFAULT_MODEL = "mistral";
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -47,12 +49,28 @@ export type ConvertOcrToRecipeLocalOptions = {
   timeoutMs?: number;
   /** Retry count after failure. Requirement says retry once; default implements that. */
   maxRetries?: number;
+  /** Recipe narrative language (default English). */
+  outputLocale?: RecipeOutputLocale;
 };
 
-const SYSTEM_PROMPT =
-  "You are a professional chef and recipe editor. Convert messy OCR text into a clean, structured recipe.";
+const SYSTEM_PROMPT_BASE =
+  "You are a professional chef and recipe editor. Convert messy OCR text into a clean, structured recipe. Express ingredient weights in grams or kilograms only—convert all ounces and pounds to metric; never leave oz or lb in the JSON output.";
 
-function buildUserPrompt(ocrText: string): string {
+const SYSTEM_PROMPT_NL =
+  " All title, description, ingredient names, steps, and notes in the JSON must be written in Dutch (Flemish/Belgian standard). Translate from the OCR when it is not Dutch.";
+
+function systemPrompt(locale: RecipeOutputLocale): string {
+  return (
+    SYSTEM_PROMPT_BASE + (locale === "nl" ? SYSTEM_PROMPT_NL : "")
+  );
+}
+
+const USER_PROMPT_NL_RULE = `
+- **Language:** Every title, description, ingredient name, step, and note must be in Dutch (Flemish/Belgian standard). Translate from the OCR if needed.
+`;
+
+function buildUserPrompt(ocrText: string, locale: RecipeOutputLocale): string {
+  const langBlock = locale === "nl" ? USER_PROMPT_NL_RULE : "";
   return `Convert the following OCR text into structured JSON:
 
 {
@@ -77,15 +95,20 @@ ${ocrText}
 IMPORTANT:
 - Return ONLY valid JSON
 - No explanations
-- Convert American metrics to European ones in the output:
-- Temperatures: convert °F to °C in the steps text (e.g. 350°F → 175°C)
-- Weight: lb/lbs → grams (g) or kilograms (kg); oz/ounces → grams (g)
-- Volume: cups → ml; tbsp/tablespoon → ml; tsp/teaspoon → ml
-- Output ingredient unit fields using only: g, kg, ml, L, or null
+${langBlock}- Convert US/imperial measures to metric in the output:
+- Temperatures: °F → °C in step text (e.g. 350°F → 175°C)
+- Weight: **oz / ounces → grams**: multiply quantity by 28.35, round sensibly; set unit to "g" or "kg". **Never** output unit "oz". lb/lbs → g or kg (1 lb = 453.59 g).
+- Liquids: fl oz → ml when clearly fluid measure (1 US fl oz ≈ 29.57 ml)
+- Dry volume: cups / tbsp / tsp → ml where applicable
+- Ingredient unit field must be only: g, kg, ml, L, or null
 `;
 }
 
-function buildStrictJsonRetryPrompt(ocrText: string): string {
+function buildStrictJsonRetryPrompt(
+  ocrText: string,
+  locale: RecipeOutputLocale,
+): string {
+  const langBlock = locale === "nl" ? USER_PROMPT_NL_RULE : "";
   return `Convert the following OCR text into structured JSON:
 
 {
@@ -109,11 +132,12 @@ ${ocrText}
 
 IMPORTANT:
 - ONLY RETURN VALID JSON. NO TEXT.
-- Convert American metrics to European ones in the output:
-- Temperatures: convert °F to °C in the steps text (e.g. 350°F → 175°C)
-- Weight: lb/lbs → grams (g) or kilograms (kg); oz/ounces → grams (g)
-- Volume: cups → ml; tbsp/tablespoon → ml; tsp/teaspoon → ml
-- Output ingredient unit fields using only: g, kg, ml, L, or null
+${langBlock}- Convert US/imperial to metric:
+- Temperatures: °F → °C in step text (e.g. 350°F → 175°C)
+- Weight: oz → g (quantity × 28.35); never output unit "oz". lb → g or kg (1 lb = 453.59 g)
+- Liquids: fl oz → ml when clearly fluid (1 US fl oz ≈ 29.57 ml)
+- Volume: cups / tbsp / tsp → ml where applicable
+- Ingredient unit field: only g, kg, ml, L, or null
 `;
 }
 
@@ -170,11 +194,13 @@ function normalizeUnit(unit: string | null | undefined): string | null {
 function normalizeRecipe(recipe: Recipe): Recipe {
   return {
     ...recipe,
-    ingredients: recipe.ingredients.map((ing) => ({
-      ...ing,
-      unit: normalizeUnit(ing.unit),
-      name: ing.name.trim(),
-    })),
+    ingredients: metricizeAllIngredients(
+      recipe.ingredients.map((ing) => ({
+        ...ing,
+        unit: normalizeUnit(ing.unit),
+        name: ing.name.trim(),
+      })),
+    ),
     steps: recipe.steps.map((s) => s.trim()).filter(Boolean),
     notes: recipe.notes.map((n) => n.trim()).filter(Boolean),
     title: recipe.title.trim() || "Recipe",
@@ -260,6 +286,8 @@ export async function convertOCRToRecipeLocal(
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
   const model = options.model ?? DEFAULT_MODEL;
   const ollamaBaseUrl = options.ollamaBaseUrl ?? OLLAMA_BASE_URL;
+  const outputLocale: RecipeOutputLocale =
+    options.outputLocale === "nl" ? "nl" : "en";
 
   const trimmed = ocrText.trim();
   if (!trimmed) {
@@ -283,11 +311,11 @@ export async function convertOCRToRecipeLocal(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const isRetry = attempt > 0;
     const userPrompt = isRetry
-      ? buildStrictJsonRetryPrompt(trimmed)
-      : buildUserPrompt(trimmed);
+      ? buildStrictJsonRetryPrompt(trimmed, outputLocale)
+      : buildUserPrompt(trimmed, outputLocale);
 
     // Ollama is a single-prompt interface, so we combine SYSTEM + USER.
-    const prompt = `SYSTEM:\n${SYSTEM_PROMPT}\n\nUSER:\n${userPrompt}\n`;
+    const prompt = `SYSTEM:\n${systemPrompt(outputLocale)}\n\nUSER:\n${userPrompt}\n`;
 
     try {
       const rawResponse = await ollamaGenerate(

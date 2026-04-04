@@ -2,6 +2,8 @@
  * Turn raw OCR text into a structured recipe (client-side heuristics).
  */
 
+import { t } from "./i18n.js";
+
 /** Lines that are very unlikely to be part of a recipe (ads, URLs, page chrome). */
 function isNoiseLine(line) {
   const t = line.trim();
@@ -400,7 +402,7 @@ export function escapeHtml(text) {
 }
 
 export function buildRecipeCardHtml(recipe) {
-  const t = escapeHtml(recipe.title || "Recipe");
+  const titleHtml = escapeHtml(recipe.title || t("recipeUntitled"));
   const formatIngredient = (ing) => {
     if (typeof ing === "string") return escapeHtml(ing);
     if (!ing || typeof ing !== "object") return escapeHtml(String(ing ?? ""));
@@ -422,8 +424,8 @@ export function buildRecipeCardHtml(recipe) {
 
   const ingBlock =
     ing.length > 0
-      ? `<section class="recipe-block recipe-block--ingredients" aria-label="Ingredients">
-          <h3 class="recipe-block__title">Ingredients</h3>
+      ? `<section class="recipe-block recipe-block--ingredients" aria-label="${escapeHtml(t("recipeIngredients"))}">
+          <h3 class="recipe-block__title">${escapeHtml(t("recipeIngredients"))}</h3>
           <ul class="recipe-list recipe-list--bullets">
             ${ing.map((item) => `<li>${item}</li>`).join("")}
           </ul>
@@ -432,8 +434,8 @@ export function buildRecipeCardHtml(recipe) {
 
   const stepsBlock =
     steps.length > 0
-      ? `<section class="recipe-block recipe-block--steps" aria-label="Instructions">
-          <h3 class="recipe-block__title">Instructions</h3>
+      ? `<section class="recipe-block recipe-block--steps" aria-label="${escapeHtml(t("recipeInstructions"))}">
+          <h3 class="recipe-block__title">${escapeHtml(t("recipeInstructions"))}</h3>
           <ol class="recipe-list recipe-list--numbered">
             ${steps.map((item) => `<li>${item}</li>`).join("")}
           </ol>
@@ -442,8 +444,8 @@ export function buildRecipeCardHtml(recipe) {
 
   const notesBlock =
     notes.length > 0
-      ? `<section class="recipe-block recipe-block--notes" aria-label="Notes">
-          <h3 class="recipe-block__title">Notes</h3>
+      ? `<section class="recipe-block recipe-block--notes" aria-label="${escapeHtml(t("recipeNotes"))}">
+          <h3 class="recipe-block__title">${escapeHtml(t("recipeNotes"))}</h3>
           <ul class="recipe-list recipe-list--notes">
             ${notes.map((item) => `<li>${item}</li>`).join("")}
           </ul>
@@ -452,13 +454,13 @@ export function buildRecipeCardHtml(recipe) {
 
   const empty =
     !ing.length && !steps.length && !notes.length
-      ? `<p class="recipe-fallback">Could not split this into ingredients and steps. Try a clearer photo or add headings like &quot;Ingredients&quot; and &quot;Instructions&quot; in the image.</p>`
+      ? `<p class="recipe-fallback">${escapeHtml(t("recipeFallbackEmpty"))}</p>`
       : "";
 
   return `
     <article class="recipe-card">
       <header class="recipe-card__header">
-        <h2 class="recipe-card__title">${t}</h2>
+        <h2 class="recipe-card__title">${titleHtml}</h2>
       </header>
       <div class="recipe-card__body">
         ${ingBlock}

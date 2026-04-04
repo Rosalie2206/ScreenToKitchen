@@ -4,3 +4,6 @@ dist-llm
 .DS_Store
 *.local
 .vercel
+recipes.db
+recipes.db-shm
+recipes.db-wal

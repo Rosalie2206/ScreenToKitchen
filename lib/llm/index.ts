@@ -13,11 +13,16 @@
 export { convertOCRToRecipe, heuristicOcrConfidence } from "./convertOcrToRecipe.js";
 export { convertOCRToRecipeLocal } from "./convertOcrToRecipeLocal.js";
 export { convertOCRToRecipeHybrid, convertOCRToRecipeHybridWithMode } from "./hybrid/hybrid.js";
-export type { Recipe, Ingredient, ConvertOcrOptions } from "./types.js";
+export type {
+  Recipe,
+  Ingredient,
+  ConvertOcrOptions,
+  RecipeOutputLocale,
+} from "./types.js";
 export type { LocalLlmWireFormat } from "./localProviderMode.js";
 export {
   parseLocalLlmProviderFromEnv,
   parseLocalLlmProviderFromRequest,
 } from "./localProviderMode.js";
 export { RecipeSchema, IngredientSchema, parseRecipeJson } from "./schema.js";
-export { SYSTEM_PROMPT, buildUserPrompt } from "./prompts.js";
+export { buildSystemPrompt, buildUserPrompt, buildRepairPrompt } from "./prompts.js";

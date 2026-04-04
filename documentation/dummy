@@ -1,4 +1,4 @@
-# How ScreenToKitchen Works
+# How Scroll Cook Repeat Works
 
 This note explains the app in plain language, but still covers the technical pieces so non-developers can understand what is happening.
 
@@ -12,21 +12,6 @@ You take a picture of a recipe, and the app:
 2. Sends that text to an AI conversion service
 3. Shows a clean recipe (title, ingredients, steps, notes)
 4. Lets you save it and browse saved recipes in a catalogue
-
----
-
-## What changed recently (high level)
-
-- The home page now has a **logo + header** and a **dropdown menu** (icon button on the top-right) with:
-  - Catalogue
-  - Behind the scenes
-- The home page also shows a **live status panel**:
-  - Backend status (green/red)
-  - LLM status (green/red)
-  - Error details when something is offline
-- The AI conversion now supports **hybrid LLM mode**:
-  - Try local model first (if enabled)
-  - Fallback to Groq (cloud) if local fails
 
 ---
 
@@ -119,3 +104,18 @@ This is controlled with environment variables.
 - `api/` — backend routes (`recipe`, `health`)
 - `lib/llm/` — local/API/hybrid LLM logic and validation
 - `documentation/` — this file and related human-readable notes
+
+---
+
+## What changed recently (high level)
+
+- The home page now has a **logo + header** and a **dropdown menu** (icon button on the top-right) with:
+  - Catalogue
+  - Behind the scenes
+- The home page also shows a **live status panel**:
+  - Backend status (green/red)
+  - LLM status (green/red)
+  - Error details when something is offline
+- The AI conversion now supports **hybrid LLM mode**:
+  - Try local model first (if enabled)
+  - Fallback to Groq (cloud) if local fails

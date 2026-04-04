@@ -7,18 +7,39 @@ import {
   cleanOcrTextForRecipe,
 } from "./recipeParser.js";
 import { fetchRecipe } from "./lib/fetchRecipe.js";
+import {
+  fetchRecipesCatalogue,
+  fetchRecipeById,
+  deleteRecipeApi,
+  postRecipe,
+} from "./lib/recipesApi.js";
 import { fetchHealth } from "./lib/fetchHealth.js";
+import { getLocale, toggleLocale, t, dateTimeLocaleTag } from "./i18n.js";
 
 const app = document.querySelector("#app");
 
-const CATALOGUE_STORAGE_KEY = "screenToKitchenCatalogue";
-/** @deprecated migrated once into catalogue */
-const LEGACY_RECIPE_STORAGE_KEY = "screenToKitchenRecipe";
+/**
+ * Per-letter spans with upward arc per word (center letters higher), plus slight rotation.
+ * Arc uses parabola 4·t·(1−t), t ∈ [0,1] along the word.
+ */
+function playfulHeroWord(word) {
+  const n = word.length;
+  return [...word]
+    .map((ch, i) => {
+      const safe = escapeHtml(ch);
+      const t = n <= 1 ? 0.5 : i / (n - 1);
+      const arc = 4 * t * (1 - t);
+      return `<span class="home-hero-char" style="--t:${t};--arc:${arc}">${safe}</span>`;
+    })
+    .join("");
+}
 
 let imageObjectUrl = null;
 let ocrRunId = 0;
-/** Last parsed recipe on the converter screen (for save fallback). */
+/** Last parsed recipe on the converter screen. */
 let lastConverterRecipe = null;
+/** Server id after POST /api/recipe (SQLite), if persisted. */
+let lastConverterRecipeId = null;
 
 function revokeImage() {
   if (imageObjectUrl) {
@@ -47,105 +68,76 @@ function parseRoute() {
   return { name: "home" };
 }
 
-function loadCatalogue() {
-  try {
-    const raw = sessionStorage.getItem(CATALOGUE_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch (_) {
-    /* ignore */
-  }
-  try {
-    const legacy = sessionStorage.getItem(LEGACY_RECIPE_STORAGE_KEY);
-    if (legacy) {
-      const recipe = JSON.parse(legacy);
-      const id = crypto.randomUUID();
-      const entries = [{ id, savedAt: Date.now(), recipe }];
-      sessionStorage.setItem(CATALOGUE_STORAGE_KEY, JSON.stringify(entries));
-      sessionStorage.removeItem(LEGACY_RECIPE_STORAGE_KEY);
-      return entries;
-    }
-  } catch (_) {
-    /* ignore */
-  }
-  return [];
-}
-
-function saveCatalogue(entries) {
-  try {
-    sessionStorage.setItem(CATALOGUE_STORAGE_KEY, JSON.stringify(entries));
-  } catch (err) {
-    console.error(err);
-  }
-}
-
-function addRecipeToCatalogue(recipe) {
-  const entries = loadCatalogue();
-  const id = crypto.randomUUID();
-  entries.unshift({ id, savedAt: Date.now(), recipe });
-  saveCatalogue(entries);
-  return id;
-}
-
-function getRecipeById(id) {
-  const entry = loadCatalogue().find((e) => e.id === id);
-  return entry?.recipe ?? null;
-}
-
-function renderMenuHeader() {
-  return `
-    <div class="home-header">
-      <div class="home-brand">
-        <a href="#/" aria-label="Go to home">
-          <img class="home-logo" src="${import.meta.env.BASE_URL}home-logo.png" alt="ScreenToKitchen logo" />
-        </a>
-        <h1 class="home-title">Screen To Kitchen</h1>
-      </div>
-      <div class="home-header__actions">
-        <a class="home-nav-icon" href="#/" aria-label="Home">
+function renderMenuHeader(options = {}) {
+  const hideHomeIcon = options.hideHomeIcon === true;
+  const homeIcon = hideHomeIcon
+    ? ""
+    : `
+        <a class="home-nav-icon" href="#/" aria-label="${escapeHtml(t("ariaHomeNav"))}">
           <img class="home-nav-icon__img" src="${import.meta.env.BASE_URL}home-icon.png" alt="" />
-        </a>
-        <details class="home-menu">
-          <summary class="home-menu__trigger" aria-label="Open menu">
-            <img class="home-menu__icon" src="${import.meta.env.BASE_URL}menu-icon.png" alt="" />
-          </summary>
-          <nav class="home-menu__panel" aria-label="Main menu">
-            <a class="home-menu__item" href="#/">Home</a>
-            <a class="home-menu__item" href="#/converter">Converter</a>
-            <a class="home-menu__item" href="#/catalogue">Catalogue</a>
-            <a class="home-menu__item" href="#/tech-kitchen/health-check">Tech Kitchen</a>
-          </nav>
-        </details>
-      </div>
-    </div>
-  `;
+        </a>`;
+  const translateAria =
+    getLocale() === "nl" ? t("translateSwitchToEn") : t("translateSwitchToNl");
+  /** Translate toggle is not shown on the home page (language can be changed after navigating away). */
+  const translateStrip = hideHomeIcon
+    ? ""
+    : `
+        <button
+          type="button"
+          class="home-header__translate"
+          aria-pressed="${getLocale() === "nl" ? "true" : "false"}"
+          aria-label="${escapeHtml(translateAria)}"
+        >
+          <img class="home-header__translate-img" src="${import.meta.env.BASE_URL}translate-banner.svg" alt="" width="356" height="186" decoding="async" />
+        </button>`;
+  const actions = `
+      <div class="home-header__actions">
+        <div class="home-header__icon-row">
+          ${homeIcon}
+          <details class="home-menu">
+            <summary class="home-menu__trigger" aria-label="${escapeHtml(t("ariaOpenMenu"))}">
+              <img class="home-menu__icon" src="${import.meta.env.BASE_URL}menu-icon.png" alt="" />
+            </summary>
+            <nav class="home-menu__panel" aria-label="${escapeHtml(t("menuPanelAria"))}">
+              <a class="home-menu__item" href="#/">${escapeHtml(t("menuHome"))}</a>
+              <a class="home-menu__item" href="#/converter">${escapeHtml(t("menuConverter"))}</a>
+              <a class="home-menu__item" href="#/catalogue">${escapeHtml(t("menuCatalogue"))}</a>
+              <a class="home-menu__item" href="#/tech-kitchen/health-check">${escapeHtml(t("menuTechKitchen"))}</a>
+            </nav>
+          </details>
+        </div>
+        ${translateStrip}
+      </div>`;
+  return `
+    <div class="home-header home-header--icons-only">
+      ${actions}
+    </div>`;
 }
 
 function renderHome() {
   revokeImage();
   lastConverterRecipe = null;
-  document.title = "ScreenToKitchen";
+  lastConverterRecipeId = null;
+  document.title = "Scroll Cook Repeat";
 
   app.innerHTML = `
     <main class="shell shell--home">
-      ${renderMenuHeader()}
-      <figure class="home-hero-art-wrap" aria-hidden="true">
-        <img class="home-hero-art" src="${import.meta.env.BASE_URL}home-cheese.png" alt="" />
-      </figure>
-
-      <section class="upload" aria-label="Upload a picture">
-        <h2 class="upload-heading">Picture</h2>
-        <p class="upload-hint hint">Choose from your gallery or take a new photo.</p>
-        <div class="upload-controls">
-          <label class="upload-button">
-            <input type="file" class="upload-input" accept="image/*" />
-            <span class="upload-button-label">Choose photo</span>
-          </label>
-        </div>
-      </section>
-
+      ${renderMenuHeader({ hideHomeIcon: true })}
+      <div class="home-hero">
+        <h1 class="home-hero-title" aria-label="Scroll Cook Repeat">
+          <span class="home-hero-title__line">${playfulHeroWord("Scroll")}</span>
+          <span class="home-hero-title__line">${playfulHeroWord("Cook")}</span>
+          <span class="home-hero-title__line">${playfulHeroWord("Repeat")}</span>
+        </h1>
+        <section class="upload upload--home-hero" aria-label="${escapeHtml(t("ariaUploadSection"))}">
+          <div class="upload-controls">
+            <label class="upload-button upload-button--home-hero">
+              <input type="file" class="upload-input" accept="image/*" />
+              <span class="upload-button-label">${escapeHtml(t("homeUploadLabel"))}</span>
+            </label>
+          </div>
+        </section>
+      </div>
     </main>
   `;
 
@@ -203,16 +195,16 @@ async function checkHealthUI() {
   try {
     const health = await fetchHealth(5000);
     const llmMode = health.llm?.source ?? "none";
-    setBackend(Boolean(health.backend?.ok), "Online");
+    setBackend(Boolean(health.backend?.ok), t("healthOnline"));
 
     if (hasSplitLlm) {
       const loc = health.llm?.local;
       if (!loc?.enabled) {
-        setHealthRow(dotLocal, badgeLocal, "na", "Not enabled");
+        setHealthRow(dotLocal, badgeLocal, "na", t("healthNotEnabled"));
       } else if (loc.ok) {
-        setHealthRow(dotLocal, badgeLocal, "ok", "Reachable");
+        setHealthRow(dotLocal, badgeLocal, "ok", t("healthReachable"));
       } else {
-        const err = loc.error?.trim() || "Unreachable";
+        const err = loc.error?.trim() || t("healthUnreachable");
         const short =
           err.length > 72 ? `${err.slice(0, 69)}…` : err;
         setHealthRow(dotLocal, badgeLocal, "bad", short);
@@ -220,19 +212,16 @@ async function checkHealthUI() {
 
       const gq = health.llm?.groq;
       if (!gq?.enabled) {
-        setHealthRow(dotGroq, badgeGroq, "bad", "No GROQ_API_KEY");
+        setHealthRow(dotGroq, badgeGroq, "bad", t("healthNoGroqKey"));
       } else if (gq.ok) {
-        setHealthRow(dotGroq, badgeGroq, "ok", "Connected (models.list)");
+        setHealthRow(dotGroq, badgeGroq, "ok", t("healthConnected"));
       } else {
-        const err = gq.error?.trim() || "Failed";
+        const err = gq.error?.trim() || t("healthFailed");
         const short =
           err.length > 72 ? `${err.slice(0, 69)}…` : err;
         setHealthRow(dotGroq, badgeGroq, "bad", short);
       }
 
-      if (detailsEl) {
-        detailsEl.textContent = `Ping URL: ${pingUrl} · Active route: ${llmMode} · Groq check: HTTP GET /api/health runs Groq models.list() on the server`;
-      }
     } else {
       const dotLlm = app.querySelector(".health-dot-llm");
       const badgeLlm = app.querySelector(".health-llm-badge");
@@ -241,55 +230,57 @@ async function checkHealthUI() {
           dotLlm,
           badgeLlm,
           "ok",
-          health.llm.source === "local" ? "Local LLM OK" : "Groq OK",
+          health.llm.source === "local"
+            ? t("healthLlmOkLocal")
+            : t("healthLlmOkGroq"),
         );
         if (detailsEl) {
-          detailsEl.textContent = `Ping URL: ${pingUrl} · LLM mode: ${llmMode}`;
+          detailsEl.textContent = `${t("healthPingUrl")}: ${pingUrl} · ${t("healthLlmModeLabel")}: ${llmMode}`;
         }
       } else {
         const why =
           health.llm?.source === "none"
-            ? "LLM unavailable"
+            ? t("healthLlmUnavailable")
             : health.llm?.source === "local"
-              ? "Local LLM failed"
-              : "Groq unavailable";
+              ? t("healthLocalFailed")
+              : t("healthGroqUnavailable");
         setHealthRow(dotLlm, badgeLlm, "bad", why);
         if (detailsEl) {
           const localErr = health.llm.local?.error
-            ? `Local: ${health.llm.local.error}`
+            ? `${t("healthErrLocal")}: ${health.llm.local.error}`
             : "";
           const groqErr = health.llm.groq?.error
-            ? `Groq: ${health.llm.groq.error}`
+            ? `${t("healthErrGroq")}: ${health.llm.groq.error}`
             : "";
           const combined = [localErr, groqErr].filter(Boolean).join(" · ");
-          detailsEl.textContent = `Ping URL: ${pingUrl} · LLM mode: ${llmMode}${combined ? ` · ${combined}` : " · No error details available."}`;
+          detailsEl.textContent = `${t("healthPingUrl")}: ${pingUrl} · ${t("healthLlmModeLabel")}: ${llmMode}${combined ? ` · ${combined}` : ` · ${t("healthNoErrorDetails")}`}`;
         }
       }
     }
   } catch (e) {
     console.error(e);
-    setBackend(false, "Offline");
+    setBackend(false, t("healthOffline"));
     if (hasSplitLlm) {
-      setHealthRow(dotLocal, badgeLocal, "bad", "Unknown");
-      setHealthRow(dotGroq, badgeGroq, "bad", "Unknown");
+      setHealthRow(dotLocal, badgeLocal, "bad", t("healthUnknown"));
+      setHealthRow(dotGroq, badgeGroq, "bad", t("healthUnknown"));
     } else {
       const dotLlm = app.querySelector(".health-dot-llm");
       const badgeLlm = app.querySelector(".health-llm-badge");
       if (dotLlm && badgeLlm) {
-        setHealthRow(dotLlm, badgeLlm, "bad", "Unavailable");
+        setHealthRow(dotLlm, badgeLlm, "bad", t("healthUnavailable"));
       }
     }
     if (detailsEl) {
-      detailsEl.textContent = `Ping URL: ${pingUrl} · Could not reach health endpoint. Is the backend running?`;
+      detailsEl.textContent = `${t("healthPingUrl")}: ${pingUrl} · ${t("healthPingFail")}`;
     }
   }
 }
 
 function renderTechKitchenTabs(active) {
   return `
-    <nav class="tech-tabs" aria-label="Tech Kitchen tabs">
-      <a class="tech-tab ${active === "health" ? "tech-tab--active" : ""}" href="#/tech-kitchen/health-check">Health check</a>
-      <a class="tech-tab ${active === "behind" ? "tech-tab--active" : ""}" href="#/tech-kitchen/behind-the-scenes">Behind the scenes</a>
+    <nav class="tech-tabs" aria-label="${escapeHtml(t("healthTabsAria"))}">
+      <a class="tech-tab ${active === "health" ? "tech-tab--active" : ""}" href="#/tech-kitchen/health-check">${escapeHtml(t("tabHealth"))}</a>
+      <a class="tech-tab ${active === "behind" ? "tech-tab--active" : ""}" href="#/tech-kitchen/behind-the-scenes">${escapeHtml(t("tabBehind"))}</a>
     </nav>
   `;
 }
@@ -298,6 +289,8 @@ function onFileSelected(event) {
   const file = event.target.files?.[0];
   if (!file || !file.type.startsWith("image/")) return;
   revokeImage();
+  lastConverterRecipe = null;
+  lastConverterRecipeId = null;
   imageObjectUrl = URL.createObjectURL(file);
   const alreadyOnConverter = parseRoute().name === "converter";
   location.hash = "#/converter";
@@ -307,8 +300,18 @@ function onFileSelected(event) {
   }
 }
 
-function setConverterSaveState(recipe, enabled) {
+/**
+ * @param {object | null} recipe
+ * @param {boolean} enabled
+ * @param {string | null | undefined} savedId — server id; omit to keep previous id (e.g. language toggle)
+ */
+function setConverterSaveState(recipe, enabled, savedId) {
   lastConverterRecipe = recipe;
+  if (!recipe || !enabled) {
+    lastConverterRecipeId = null;
+  } else if (savedId !== undefined) {
+    lastConverterRecipeId = savedId;
+  }
   const btn = app.querySelector(".save-recipe-btn");
   if (btn) {
     btn.disabled = !enabled;
@@ -408,7 +411,7 @@ async function runConverterOcr(runId, imageUrl) {
     const worker = await createWorker("eng");
     try {
       statusEl.hidden = false;
-      statusEl.textContent = "Preparing image for OCR…";
+      statusEl.textContent = t("ocrPreparing");
       const ocrInput = await preprocessImageForOcr(imageUrl);
 
       // Tesseract tuning: keep best-effort (some params may not exist in all versions).
@@ -427,32 +430,37 @@ async function runConverterOcr(runId, imageUrl) {
       if (runId !== ocrRunId || parseRoute().name !== "converter") return;
 
       statusEl.hidden = false;
-      statusEl.textContent = "Converting text to a structured recipe…";
+      statusEl.textContent = t("ocrConverting");
       outputWrap.hidden = false;
       const cleanedForLlm = cleanOcrForLlm(text);
       const trimmed = cleanedForLlm.trim();
       if (!trimmed.length) {
-        recipeRoot.innerHTML =
-          '<p class="recipe-fallback">(No text detected in this image.)</p>';
+        recipeRoot.innerHTML = `<p class="recipe-fallback">${escapeHtml(t("ocrNoText"))}</p>`;
         statusEl.hidden = true;
         setConverterSaveState(null, false);
         return;
       }
 
       try {
-        const recipe = await fetchRecipe(trimmed);
+        const { recipe, id } = await fetchRecipe(trimmed, {
+          outputLocale: getLocale() === "nl" ? "nl" : "en",
+        });
         if (runId !== ocrRunId || parseRoute().name !== "converter") return;
 
         recipeRoot.innerHTML = buildRecipeCardHtml(recipe);
         statusEl.hidden = true;
-        setConverterSaveState(recipe, true);
+        setConverterSaveState(recipe, true, id ?? null);
+        const thumbWrap = app.querySelector(".converter-thumb-wrap");
+        if (thumbWrap) thumbWrap.hidden = true;
+        const uploadLede = app.querySelector(".converter-lede");
+        if (uploadLede) uploadLede.hidden = true;
       } catch (e) {
         console.error(e);
         const msg =
           e instanceof Error ? e.message : e ? String(e) : "Unknown error";
         statusEl.hidden = true;
         recipeRoot.innerHTML = `
-          <p class="recipe-fallback">Could not convert this image into a recipe. Try again with a clearer photo.</p>
+          <p class="recipe-fallback">${escapeHtml(t("ocrConvertFail"))}</p>
           <p class="recipe-fallback recipe-error-details">${escapeHtml(msg)}</p>
         `;
         setConverterSaveState(null, false);
@@ -462,30 +470,30 @@ async function runConverterOcr(runId, imageUrl) {
     }
   } catch (err) {
     if (runId !== ocrRunId || parseRoute().name !== "converter") return;
-    statusEl.textContent =
-      "Could not read text from this image. Check your connection and try again.";
+    statusEl.textContent = t("ocrReadFail");
     console.error(err);
     setConverterSaveState(null, false);
   }
 }
 
 function renderConverter() {
-  document.title = "Converter";
+  document.title = t("docTitleConverter");
 
   if (!imageObjectUrl) {
     lastConverterRecipe = null;
+    lastConverterRecipeId = null;
     app.innerHTML = `
       <main class="shell shell--converter">
         ${renderMenuHeader()}
-        <h1>Converter</h1>
-        <p class="hint converter-empty">No picture loaded yet.</p>
-        <section class="upload" aria-label="Upload a picture">
-          <h2 class="upload-heading">Picture</h2>
-          <p class="upload-hint hint">Choose from your gallery or take a new photo.</p>
+        <h1>${escapeHtml(t("converterTitle"))}</h1>
+        <p class="hint converter-empty">${escapeHtml(t("converterEmpty"))}</p>
+        <section class="upload" aria-label="${escapeHtml(t("ariaUploadSection"))}">
+          <h2 class="upload-heading">${escapeHtml(t("uploadHeading"))}</h2>
+          <p class="upload-hint hint">${escapeHtml(t("uploadHint"))}</p>
           <div class="upload-controls">
             <label class="upload-button">
               <input type="file" class="upload-input" accept="image/*" />
-              <span class="upload-button-label">Choose photo</span>
+              <span class="upload-button-label">${escapeHtml(t("choosePhoto"))}</span>
             </label>
           </div>
         </section>
@@ -496,43 +504,60 @@ function renderConverter() {
   }
 
   const url = imageObjectUrl;
-  const runId = ++ocrRunId;
-  lastConverterRecipe = null;
+  const recipeToRestore = lastConverterRecipe;
 
   app.innerHTML = `
     <main class="shell shell--converter">
       ${renderMenuHeader()}
-      <h1>Converter</h1>
-      <p class="lede converter-lede">Uploaded picture</p>
-      <figure class="converter-thumb-wrap">
-        <img class="converter-thumb" src="${url}" alt="Uploaded picture thumbnail" width="160" height="160" decoding="async" />
-      </figure>
+      <h1>${escapeHtml(t("converterTitle"))}</h1>
       <section class="ocr-section" aria-live="polite">
-        <p class="ocr-status">Reading text from image… This may take a moment the first time.</p>
+        <p class="ocr-status">${escapeHtml(t("ocrReading"))}</p>
         <div class="ocr-output-wrap" hidden>
-          <h2 class="ocr-heading">Recipe</h2>
           <div class="recipe-root"></div>
         </div>
       </section>
       <div class="converter-actions">
-        <button type="button" class="save-recipe-btn" disabled>Save recipe</button>
+        <button type="button" class="save-recipe-btn" disabled>${escapeHtml(t("saveRecipe"))}</button>
       </div>
     </main>
   `;
 
-  app.querySelector(".save-recipe-btn").addEventListener("click", () => {
+  app.querySelector(".save-recipe-btn").addEventListener("click", async () => {
     const recipe = lastConverterRecipe;
     if (!recipe) return;
-    const id = addRecipeToCatalogue(recipe);
-    location.hash = `#/recipe/${id}`;
+    if (lastConverterRecipeId) {
+      location.hash = `#/recipe/${lastConverterRecipeId}`;
+      return;
+    }
+    try {
+      const { id } = await postRecipe(recipe);
+      lastConverterRecipeId = id;
+      location.hash = `#/recipe/${id}`;
+    } catch (e) {
+      console.error(e);
+    }
   });
 
+  if (recipeToRestore) {
+    const recipeRoot = app.querySelector(".recipe-root");
+    const outputWrap = app.querySelector(".ocr-output-wrap");
+    const statusEl = app.querySelector(".ocr-status");
+    if (recipeRoot && outputWrap && statusEl) {
+      recipeRoot.innerHTML = buildRecipeCardHtml(recipeToRestore);
+      outputWrap.hidden = false;
+      statusEl.hidden = true;
+      setConverterSaveState(recipeToRestore, true);
+    }
+    return;
+  }
+
+  const runId = ++ocrRunId;
   runConverterOcr(runId, url);
 }
 
 function formatSavedDate(ts) {
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(dateTimeLocaleTag(), {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(ts));
@@ -541,16 +566,37 @@ function formatSavedDate(ts) {
   }
 }
 
-function renderCataloguePage() {
-  document.title = "Catalogue · ScreenToKitchen";
-  const entries = loadCatalogue();
+async function renderCataloguePage() {
+  document.title = t("docTitleCatalogue");
+  app.innerHTML = `
+    <main class="shell shell--catalogue">
+      ${renderMenuHeader()}
+      <h1 class="catalogue-title">${escapeHtml(t("catalogueTitle"))}</h1>
+      <p class="hint converter-empty">${escapeHtml(t("catalogueLoading"))}</p>
+    </main>
+  `;
+
+  let entries;
+  try {
+    entries = await fetchRecipesCatalogue();
+  } catch (e) {
+    console.error(e);
+    app.innerHTML = `
+      <main class="shell shell--catalogue">
+        ${renderMenuHeader()}
+        <h1 class="catalogue-title">${escapeHtml(t("catalogueTitle"))}</h1>
+        <p class="hint converter-empty">${escapeHtml(t("catalogueLoadError"))}</p>
+      </main>
+    `;
+    return;
+  }
 
   if (!entries.length) {
     app.innerHTML = `
       <main class="shell shell--catalogue">
         ${renderMenuHeader()}
-        <h1 class="catalogue-title">Catalogue</h1>
-        <p class="hint converter-empty">No saved recipes yet. Use Converter to read a recipe from a photo, then tap Save recipe.</p>
+        <h1 class="catalogue-title">${escapeHtml(t("catalogueTitle"))}</h1>
+        <p class="hint converter-empty">${escapeHtml(t("catalogueEmpty"))}</p>
       </main>
     `;
     return;
@@ -558,11 +604,17 @@ function renderCataloguePage() {
 
   const items = entries
     .map((e) => {
-      const title = e.recipe?.title?.trim() || "Recipe";
+      const title = e.recipe?.title?.trim() || t("recipeUntitled");
       const label = escapeHtml(title);
+      const delLabel = escapeHtml(t("catalogueDelete"));
       return `<li class="catalogue-item">
-        <a class="catalogue-link" href="#/recipe/${e.id}">${label}</a>
-        <span class="catalogue-meta">${escapeHtml(formatSavedDate(e.savedAt))}</span>
+        <div class="catalogue-item__row">
+          <div class="catalogue-item__main">
+            <a class="catalogue-link" href="#/recipe/${escapeHtml(e.id)}">${label}</a>
+            <span class="catalogue-meta">${escapeHtml(formatSavedDate(e.savedAt))}</span>
+          </div>
+          <button type="button" class="catalogue-delete" data-id="${escapeHtml(e.id)}" aria-label="${delLabel}">×</button>
+        </div>
       </li>`;
     })
     .join("");
@@ -570,8 +622,8 @@ function renderCataloguePage() {
   app.innerHTML = `
     <main class="shell shell--catalogue">
       ${renderMenuHeader()}
-      <h1 class="catalogue-title">Catalogue</h1>
-      <p class="lede catalogue-lede">Saved recipes</p>
+      <h1 class="catalogue-title">${escapeHtml(t("catalogueTitle"))}</h1>
+      <p class="lede catalogue-lede">${escapeHtml(t("catalogueLede"))}</p>
       <ul class="catalogue-list">
         ${items}
       </ul>
@@ -579,28 +631,41 @@ function renderCataloguePage() {
   `;
 }
 
-function renderRecipePage(recipeId) {
-  const recipe = recipeId ? getRecipeById(recipeId) : null;
+async function renderRecipePage(recipeId) {
+  document.title = t("docTitleRecipe");
+  app.innerHTML = `
+    <main class="shell shell--recipe">
+      ${renderMenuHeader()}
+      <h1 class="recipe-page-title">${escapeHtml(t("recipePageMissing"))}</h1>
+      <p class="hint converter-empty">${escapeHtml(t("catalogueLoading"))}</p>
+    </main>
+  `;
+
+  let recipe = null;
+  try {
+    recipe = recipeId ? await fetchRecipeById(recipeId) : null;
+  } catch (e) {
+    console.error(e);
+  }
 
   if (!recipe) {
-    document.title = "Recipe · ScreenToKitchen";
     app.innerHTML = `
       <main class="shell shell--recipe">
         ${renderMenuHeader()}
-        <h1 class="recipe-page-title">Recipe</h1>
-        <p class="hint converter-empty">This recipe was not found. It may have been removed or the link is invalid.</p>
+        <h1 class="recipe-page-title">${escapeHtml(t("recipePageMissing"))}</h1>
+        <p class="hint converter-empty">${escapeHtml(t("recipeNotFound"))}</p>
       </main>
     `;
     return;
   }
 
-  const title = recipe.title?.trim() || "Recipe";
-  document.title = `${title} · Saved`;
+  const title = recipe.title?.trim() || t("recipeUntitled");
+  document.title = `${title} · ${t("docTitleSaved")}`;
 
   app.innerHTML = `
     <main class="shell shell--recipe">
       ${renderMenuHeader()}
-      <h1 class="recipe-page-title">Saved recipe</h1>
+      <h1 class="recipe-page-title">${escapeHtml(t("recipeSavedHeading"))}</h1>
       <div class="recipe-page-root">${buildRecipeCardHtml(recipe)}</div>
     </main>
   `;
@@ -612,58 +677,57 @@ function prepareBehindTheScenesMarkdown(raw) {
 }
 
 function renderBehindTheScenes() {
-  document.title = "Tech Kitchen · Behind the scenes";
+  document.title = t("docTitleTechBehind");
   const html = marked.parse(prepareBehindTheScenesMarkdown(dummyMarkdown), {
     gfm: true,
   });
   app.innerHTML = `
     <main class="shell shell--behind">
       ${renderMenuHeader()}
-      <h1 class="behind-title">Tech Kitchen</h1>
+      <h1 class="behind-title">${escapeHtml(t("behindTitle"))}</h1>
       ${renderTechKitchenTabs("behind")}
-      <p class="behind-lede lede">How this app works—in plain language.</p>
+      <p class="behind-lede lede">${escapeHtml(t("behindLede"))}</p>
       <article class="doc-prose">${html}</article>
     </main>
   `;
 }
 
 function renderHealthCheckPage() {
-  document.title = "Tech Kitchen · Health check";
+  document.title = t("docTitleTechHealth");
   app.innerHTML = `
     <main class="shell shell--behind">
       ${renderMenuHeader()}
-      <h1 class="behind-title">Tech Kitchen</h1>
+      <h1 class="behind-title">${escapeHtml(t("behindTitle"))}</h1>
       ${renderTechKitchenTabs("health")}
-      <p class="behind-lede lede">Live backend, local LLM, and Groq status.</p>
-      <section class="health-panel" aria-label="System status">
+      <p class="behind-lede lede">${escapeHtml(t("healthLede"))}</p>
+      <section class="health-panel" aria-label="${escapeHtml(t("healthPanelAria"))}">
         <div class="health-cell">
           <div class="health-cell__name">
             <span class="health-dot health-dot--bad health-dot-backend" aria-hidden="true"></span>
-            Backend API
+            ${escapeHtml(t("healthBackend"))}
           </div>
           <div class="health-cell__status">
-            <span class="health-badge health-badge--bad health-backend-badge">Checking…</span>
+            <span class="health-badge health-badge--bad health-backend-badge">${escapeHtml(t("healthChecking"))}</span>
           </div>
         </div>
         <div class="health-cell">
           <div class="health-cell__name">
             <span class="health-dot health-dot--bad health-dot-local" aria-hidden="true"></span>
-            Local LLM
+            ${escapeHtml(t("healthLocalLlm"))}
           </div>
           <div class="health-cell__status">
-            <span class="health-badge health-badge--bad health-local-badge">Checking…</span>
+            <span class="health-badge health-badge--bad health-local-badge">${escapeHtml(t("healthChecking"))}</span>
           </div>
         </div>
         <div class="health-cell">
           <div class="health-cell__name">
             <span class="health-dot health-dot--bad health-dot-groq" aria-hidden="true"></span>
-            Groq API
+            ${escapeHtml(t("healthGroq"))}
           </div>
           <div class="health-cell__status">
-            <span class="health-badge health-badge--bad health-groq-badge">Checking…</span>
+            <span class="health-badge health-badge--bad health-groq-badge">${escapeHtml(t("healthChecking"))}</span>
           </div>
         </div>
-        <p class="hint health-details">Loading status details…</p>
       </section>
     </main>
   `;
@@ -671,11 +735,12 @@ function renderHealthCheckPage() {
 }
 
 function render() {
+  document.documentElement.lang = getLocale() === "nl" ? "nl-BE" : "en";
   const route = parseRoute();
   if (route.name === "converter") {
     renderConverter();
   } else if (route.name === "catalogue") {
-    renderCataloguePage();
+    void renderCataloguePage();
   } else if (route.name === "tech-behind") {
     renderBehindTheScenes();
   } else if (route.name === "tech-health") {
@@ -685,13 +750,38 @@ function render() {
       location.hash = "#/catalogue";
       return;
     }
-    renderRecipePage(route.recipeId);
+    void renderRecipePage(route.recipeId);
   } else {
     renderHome();
   }
 }
 
 window.addEventListener("hashchange", render);
+
+app.addEventListener("click", (e) => {
+  const btn = e.target.closest(".home-header__translate");
+  if (!btn) return;
+  e.preventDefault();
+  toggleLocale();
+  render();
+});
+
+app.addEventListener("click", (e) => {
+  const del = e.target.closest(".catalogue-delete");
+  if (!del) return;
+  e.preventDefault();
+  const id = del.getAttribute("data-id");
+  if (!id) return;
+  void (async () => {
+    try {
+      await deleteRecipeApi(id);
+      if (parseRoute().name === "catalogue") void renderCataloguePage();
+    } catch (err) {
+      console.error(err);
+    }
+  })();
+});
+
 render();
 
 const base = import.meta.env.BASE_URL;

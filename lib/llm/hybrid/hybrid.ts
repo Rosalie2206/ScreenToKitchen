@@ -1,6 +1,6 @@
 import { convertOCRToRecipeHybridLocal } from "./local.js";
 import { convertOCRToRecipeHybridApi } from "./api.js";
-import type { Recipe } from "../types.js";
+import type { Recipe, RecipeOutputLocale } from "../types.js";
 import {
   parseLocalLlmProviderFromEnv,
   type LocalLlmWireFormat,
@@ -35,7 +35,11 @@ function sanitizeCloudErrorMessage(msg: string): string {
  */
 export async function convertOCRToRecipeHybrid(
   ocrText: string,
-  options?: { useLocalLlm?: boolean; localProvider?: LocalLlmWireFormat },
+  options?: {
+    useLocalLlm?: boolean;
+    localProvider?: LocalLlmWireFormat;
+    outputLocale?: RecipeOutputLocale;
+  },
 ): Promise<Recipe> {
   const { recipe } = await convertOCRToRecipeHybridWithMode(ocrText, options);
   return recipe;
@@ -46,9 +50,15 @@ export async function convertOCRToRecipeHybrid(
  */
 export async function convertOCRToRecipeHybridWithMode(
   ocrText: string,
-  options?: { useLocalLlm?: boolean; localProvider?: LocalLlmWireFormat },
+  options?: {
+    useLocalLlm?: boolean;
+    localProvider?: LocalLlmWireFormat;
+    outputLocale?: RecipeOutputLocale;
+  },
 ): Promise<{ recipe: Recipe; source: HybridModeSource }> {
   const useLocal = options?.useLocalLlm ?? isTrueEnv(process.env.USE_LOCAL_LLM);
+  const outputLocale: RecipeOutputLocale =
+    options?.outputLocale === "nl" ? "nl" : "en";
   const timeoutMs = Number(process.env.LOCAL_LLM_TIMEOUT_MS ?? 10_000);
   const localProvider: LocalLlmWireFormat =
     options?.localProvider ??
@@ -78,11 +88,13 @@ export async function convertOCRToRecipeHybridWithMode(
               // Local Chat Completions servers typically accept any non-empty bearer token.
               apiKey: process.env.LOCAL_LLM_API_KEY?.trim() || "local-llm",
               maxRetries: 2,
+              outputLocale,
             })
           : await convertOCRToRecipeHybridLocal(ocrText, {
               timeoutMs,
               ollamaBaseUrl: localBaseUrl,
               model: localModel,
+              outputLocale,
             });
       return { recipe, source: "local" };
     } catch (err) {
@@ -102,6 +114,7 @@ export async function convertOCRToRecipeHybridWithMode(
     const recipe = await convertOCRToRecipeHybridApi(ocrText, {
       model: groqModel,
       maxRetries: 2,
+      outputLocale,
     });
     return { recipe, source: "api" };
   } catch (apiErr) {

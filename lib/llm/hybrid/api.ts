@@ -1,6 +1,6 @@
 import { convertOCRToRecipe } from "../convertOcrToRecipe.js";
 import { RecipeSchema } from "../schema.js";
-import type { Recipe } from "../types.js";
+import type { Recipe, RecipeOutputLocale } from "../types.js";
 
 /**
  * Fallback conversion using Groq (chat completions).
@@ -15,6 +15,7 @@ export async function convertOCRToRecipeHybridApi(
     apiKey?: string;
     baseURL?: string;
     maxRetries?: number;
+    outputLocale?: RecipeOutputLocale;
   },
 ): Promise<Recipe> {
   const recipe = await convertOCRToRecipe(ocrText, {
@@ -22,6 +23,7 @@ export async function convertOCRToRecipeHybridApi(
     apiKey: opts.apiKey,
     baseURL: opts.baseURL,
     maxRetries: opts.maxRetries ?? 3,
+    outputLocale: opts.outputLocale,
   });
 
   return RecipeSchema.parse(recipe) as Recipe;

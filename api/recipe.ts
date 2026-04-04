@@ -11,6 +11,7 @@ import {
   parseLocalLlmProviderFromRequest,
   type LocalLlmWireFormat,
 } from "../lib/llm/localProviderMode.js";
+import { saveRecipe } from "../lib/db.js";
 
 function messageFromUnknown(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message || fallback;
@@ -146,6 +147,16 @@ export default async function handler(
     return;
   }
 
+  const rawLocale =
+    typeof body === "object" &&
+    body !== null &&
+    "outputLocale" in body &&
+    typeof (body as { outputLocale: unknown }).outputLocale === "string"
+      ? (body as { outputLocale: string }).outputLocale.trim().toLowerCase()
+      : "";
+  const outputLocale =
+    rawLocale === "nl" ? ("nl" as const) : ("en" as const);
+
   // Hybrid: optional local LLM first, then Groq (see lib/llm/hybrid/hybrid.ts).
   try {
     const useLocalLlm = resolveUseLocalLlm(req);
@@ -153,9 +164,21 @@ export default async function handler(
     const hybridRecipe = await convertOCRToRecipeHybrid(text, {
       useLocalLlm,
       localProvider,
+      outputLocale,
     });
+    const recipe = toRecipeResponse(hybridRecipe as ParsedRecipe) as Recipe;
+    let id: string | undefined;
+    let created_at: string | undefined;
+    try {
+      const saved = saveRecipe(recipe);
+      id = saved.id;
+      created_at = saved.created_at;
+    } catch (dbErr) {
+      console.error("saveRecipe after LLM:", dbErr);
+    }
     res.status(200).json({
-      recipe: toRecipeResponse(hybridRecipe as ParsedRecipe) as Recipe,
+      recipe,
+      ...(id && created_at ? { id, created_at } : {}),
     });
   } catch (e) {
     res.status(502).json({

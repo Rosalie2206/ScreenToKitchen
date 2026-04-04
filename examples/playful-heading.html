@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Playful heading — Chewy + word arc</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Chewy&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --ink: #1e5bb8;
+        --font-playful: "Chewy", cursive, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        background: #f9f9f9;
+        font-family: system-ui, sans-serif;
+      }
+      .playful-title {
+        margin: 0;
+        font-family: var(--font-playful);
+        font-weight: 400;
+        font-size: clamp(2.75rem, 12vw, 5rem);
+        line-height: 1.15;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink);
+      }
+      .playful-title__line {
+        display: block;
+        margin: 0.08em 0;
+      }
+      .playful-char {
+        display: inline-block;
+        transform-origin: center bottom;
+        transform: translateY(calc(-0.52em * var(--arc, 0)))
+          rotate(calc((var(--t, 0.5) - 0.5) * 11deg));
+      }
+    </style>
+  </head>
+  <body>
+    <h1 class="playful-title" aria-label="Scroll Cook Repeat">
+      <span class="playful-title__line" id="line1"></span>
+      <span class="playful-title__line" id="line2"></span>
+      <span class="playful-title__line" id="line3"></span>
+    </h1>
+    <script>
+      function fillLine(el, word) {
+        const n = word.length;
+        [...word].forEach((ch, i) => {
+          const t = n <= 1 ? 0.5 : i / (n - 1);
+          const arc = 4 * t * (1 - t);
+          const s = document.createElement("span");
+          s.className = "playful-char";
+          s.style.setProperty("--t", t);
+          s.style.setProperty("--arc", arc);
+          s.textContent = ch;
+          el.appendChild(s);
+        });
+      }
+      fillLine(document.getElementById("line1"), "Scroll");
+      fillLine(document.getElementById("line2"), "Cook");
+      fillLine(document.getElementById("line3"), "Repeat");
+    </script>
+  </body>
+</html>

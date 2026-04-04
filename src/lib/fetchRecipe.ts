@@ -43,11 +43,23 @@ export class RecipeApiError extends Error {
   }
 }
 
+export type FetchRecipeOptions = {
+  /** Matches UI language toggle: Dutch (Flemish) vs English. */
+  outputLocale?: "en" | "nl";
+};
+
 /**
  * Calls POST /api/recipe with OCR text and returns the structured recipe.
  * Does not send secrets — the Groq key stays on the server.
  */
-export async function fetchRecipe(ocrText: string): Promise<Recipe> {
+export async function fetchRecipe(
+  ocrText: string,
+  options?: FetchRecipeOptions,
+): Promise<{
+  recipe: Recipe;
+  id?: string;
+  created_at?: string;
+}> {
   const trimmed = ocrText.trim();
   if (!trimmed) {
     throw new RecipeApiError("ocrText is empty", 400, "VALIDATION_ERROR");
@@ -65,10 +77,14 @@ export async function fetchRecipe(ocrText: string): Promise<Recipe> {
     if (provider) {
       headers["x-local-llm-provider"] = provider;
     }
+    const outputLocale = options?.outputLocale === "nl" ? "nl" : "en";
     res = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ ocrText: trimmed } satisfies { ocrText: string }),
+      body: JSON.stringify({
+        ocrText: trimmed,
+        outputLocale,
+      } satisfies { ocrText: string; outputLocale: "en" | "nl" }),
     });
   } catch (e) {
     throw new RecipeApiError(
@@ -111,5 +127,10 @@ export async function fetchRecipe(ocrText: string): Promise<Recipe> {
     throw new RecipeApiError("Response missing recipe", res.status, "BAD_RESPONSE");
   }
 
-  return data.recipe;
+  return {
+    recipe: data.recipe,
+    ...(typeof data.id === "string" && typeof data.created_at === "string"
+      ? { id: data.id, created_at: data.created_at }
+      : {}),
+  };
 }

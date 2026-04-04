@@ -27,6 +27,9 @@ export type RecipeApiRequestBody = {
 
 export type RecipeApiSuccessResponse = {
   recipe: Recipe;
+  /** Present when the recipe was persisted to SQLite */
+  id?: string;
+  created_at?: string;
 };
 
 export type RecipeApiErrorResponse = {

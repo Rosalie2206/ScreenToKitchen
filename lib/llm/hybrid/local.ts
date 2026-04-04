@@ -1,6 +1,6 @@
 import { RecipeSchema } from "../schema.js";
 import { convertOCRToRecipeLocal } from "../convertOcrToRecipeLocal.js";
-import type { Recipe } from "../types.js";
+import type { Recipe, RecipeOutputLocale } from "../types.js";
 
 /**
  * Local-first conversion using Ollama.
@@ -17,6 +17,7 @@ export async function convertOCRToRecipeHybridLocal(
     timeoutMs: number;
     ollamaBaseUrl: string;
     model: string;
+    outputLocale?: RecipeOutputLocale;
   },
 ): Promise<Recipe> {
   // convertOCRToRecipeLocal already enforces schema validation by parsing.
@@ -26,6 +27,7 @@ export async function convertOCRToRecipeHybridLocal(
       model: opts.model,
       ollamaBaseUrl: opts.ollamaBaseUrl,
       timeoutMs: opts.timeoutMs,
+      outputLocale: opts.outputLocale,
       // Local implementation already retries once on JSON parse failures.
       // We keep it at 2 attempts to match "retry once".
       maxRetries: 2,

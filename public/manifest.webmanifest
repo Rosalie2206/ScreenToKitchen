@@ -1,12 +1,12 @@
 {
-  "name": "ScreenToKitchen",
-  "short_name": "ScreenToKitchen",
-  "description": "ScreenToKitchen web app",
+  "name": "Scroll Cook Repeat",
+  "short_name": "Scroll Cook",
+  "description": "Scroll Cook Repeat web app",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f4f4ea",
-  "theme_color": "#f4f4ea",
+  "background_color": "#f9f9f9",
+  "theme_color": "#f9f9f9",
   "icons": [
     {
       "src": "./pwa-192.png",

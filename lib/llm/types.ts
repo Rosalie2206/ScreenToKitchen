@@ -26,6 +26,9 @@ export type Recipe = {
   source_language?: string | null;
 };
 
+/** Structured recipe narrative language (UI toggle: English vs Dutch/Flemish). */
+export type RecipeOutputLocale = "en" | "nl";
+
 export type ConvertOcrOptions = {
   /** Defaults to process.env.GROQ_API_KEY */
   apiKey?: string;
@@ -37,4 +40,6 @@ export type ConvertOcrOptions = {
   maxRetries?: number;
   /** Inject a custom Groq client (for tests or proxies) */
   client?: Groq;
+  /** Recipe title, description, ingredients, steps, notes language (default English). */
+  outputLocale?: RecipeOutputLocale;
 };
