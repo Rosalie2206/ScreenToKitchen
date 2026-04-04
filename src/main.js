@@ -44,13 +44,51 @@ let lastConverterRecipeId = null;
 /** sessionStorage key prefix — survives navigation when GET /api/recipes/:id misses (serverless). */
 const RECIPE_STASH_PREFIX = "stk_recipe_";
 
-function stashRecipeById(id, recipe) {
+/**
+ * Stash payload: `{ recipe, savedAt }` (older entries may be a raw recipe object).
+ * @param {number} [savedAtMs] — if set (e.g. from API `created_at`), used as saved time
+ */
+function stashRecipeById(id, recipe, savedAtMs) {
   if (!id || !recipe) return;
   try {
-    sessionStorage.setItem(RECIPE_STASH_PREFIX + id, JSON.stringify(recipe));
+    let savedAt = Date.now();
+    if (typeof savedAtMs === "number" && !Number.isNaN(savedAtMs)) {
+      savedAt = savedAtMs;
+    } else {
+      const raw = sessionStorage.getItem(RECIPE_STASH_PREFIX + id);
+      if (raw) {
+        const n = normalizeStashPayload(raw);
+        if (n) savedAt = n.savedAt;
+      }
+    }
+    sessionStorage.setItem(
+      RECIPE_STASH_PREFIX + id,
+      JSON.stringify({ recipe, savedAt }),
+    );
   } catch (_) {
     /* quota / private mode */
   }
+}
+
+/** @returns {{ recipe: object, savedAt: number } | null} */
+function normalizeStashPayload(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if ("recipe" in parsed && parsed.recipe) {
+      const savedAt =
+        typeof parsed.savedAt === "number" && !Number.isNaN(parsed.savedAt)
+          ? parsed.savedAt
+          : 0;
+      return { recipe: parsed.recipe, savedAt };
+    }
+    if (typeof parsed.title === "string" && Array.isArray(parsed.ingredients)) {
+      return { recipe: parsed, savedAt: 0 };
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 function getStashedRecipe(id) {
@@ -58,10 +96,50 @@ function getStashedRecipe(id) {
   try {
     const raw = sessionStorage.getItem(RECIPE_STASH_PREFIX + id);
     if (!raw) return null;
-    return JSON.parse(raw);
+    const n = normalizeStashPayload(raw);
+    return n ? n.recipe : null;
   } catch {
     return null;
   }
+}
+
+/** Catalogue rows from sessionStorage (for when GET /api/recipes is empty on another serverless instance). */
+function getAllStashedCatalogueEntries() {
+  /** @type {Array<{ id: string, savedAt: number, recipe: object }>} */
+  const out = [];
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (!key || !key.startsWith(RECIPE_STASH_PREFIX)) continue;
+      const id = key.slice(RECIPE_STASH_PREFIX.length);
+      if (!id) continue;
+      const raw = sessionStorage.getItem(key);
+      if (!raw) continue;
+      const n = normalizeStashPayload(raw);
+      if (n && n.recipe) out.push({ id, savedAt: n.savedAt, recipe: n.recipe });
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  return out.sort((a, b) => b.savedAt - a.savedAt);
+}
+
+/** Merge API list with stashed-only recipes (same id: prefer API row). */
+function mergeCatalogueWithStash(apiEntries) {
+  const byId = new Map();
+  for (const e of apiEntries) {
+    byId.set(e.id, e);
+  }
+  for (const e of getAllStashedCatalogueEntries()) {
+    if (!byId.has(e.id)) {
+      byId.set(e.id, {
+        id: e.id,
+        savedAt: e.savedAt,
+        recipe: e.recipe,
+      });
+    }
+  }
+  return [...byId.values()].sort((a, b) => b.savedAt - a.savedAt);
 }
 
 function removeStashedRecipe(id) {
@@ -649,34 +727,33 @@ async function renderCataloguePage() {
     </main>
   `;
 
-  let entries;
+  let entries = [];
+  let catalogueFetchFailed = false;
   try {
     entries = await fetchRecipesCatalogue();
   } catch (e) {
     console.error(e);
-    app.innerHTML = `
-      <main class="shell shell--catalogue">
-        ${renderMenuHeader()}
-        <h1 class="catalogue-title">${escapeHtml(t("catalogueTitle"))}</h1>
-        <p class="hint converter-empty">${escapeHtml(t("catalogueLoadError"))}</p>
-      </main>
-    `;
-    return;
+    catalogueFetchFailed = true;
+    entries = [];
   }
+
+  entries = mergeCatalogueWithStash(entries);
 
   if (!entries.length) {
     app.innerHTML = `
       <main class="shell shell--catalogue">
         ${renderMenuHeader()}
         <h1 class="catalogue-title">${escapeHtml(t("catalogueTitle"))}</h1>
-        <p class="hint converter-empty">${escapeHtml(t("catalogueEmpty"))}</p>
+        <p class="hint converter-empty">${escapeHtml(
+          catalogueFetchFailed ? t("catalogueLoadError") : t("catalogueEmpty"),
+        )}</p>
       </main>
     `;
     return;
   }
 
   for (const e of entries) {
-    if (e.id && e.recipe) stashRecipeById(e.id, e.recipe);
+    if (e.id && e.recipe) stashRecipeById(e.id, e.recipe, e.savedAt);
   }
 
   const items = entries
