@@ -41,6 +41,38 @@ let lastConverterRecipe = null;
 /** Server id after POST /api/recipe (SQLite), if persisted. */
 let lastConverterRecipeId = null;
 
+/** sessionStorage key prefix — survives navigation when GET /api/recipes/:id misses (serverless). */
+const RECIPE_STASH_PREFIX = "stk_recipe_";
+
+function stashRecipeById(id, recipe) {
+  if (!id || !recipe) return;
+  try {
+    sessionStorage.setItem(RECIPE_STASH_PREFIX + id, JSON.stringify(recipe));
+  } catch (_) {
+    /* quota / private mode */
+  }
+}
+
+function getStashedRecipe(id) {
+  if (!id) return null;
+  try {
+    const raw = sessionStorage.getItem(RECIPE_STASH_PREFIX + id);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function removeStashedRecipe(id) {
+  if (!id) return;
+  try {
+    sessionStorage.removeItem(RECIPE_STASH_PREFIX + id);
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 function revokeImage() {
   if (imageObjectUrl) {
     URL.revokeObjectURL(imageObjectUrl);
@@ -321,6 +353,9 @@ function setConverterSaveState(recipe, enabled, savedId) {
     lastConverterRecipeId = null;
   } else if (savedId !== undefined) {
     lastConverterRecipeId = savedId;
+    if (recipe && savedId) {
+      stashRecipeById(savedId, recipe);
+    }
   }
   const btn = document.getElementById("save-recipe-btn");
   if (btn) {
@@ -563,6 +598,7 @@ function renderConverter() {
       try {
         const { id } = await postRecipe(plain);
         lastConverterRecipeId = id;
+        stashRecipeById(id, lastConverterRecipe);
         navigateToRecipe(id);
       } catch (e) {
         console.error(e);
@@ -639,6 +675,10 @@ async function renderCataloguePage() {
     return;
   }
 
+  for (const e of entries) {
+    if (e.id && e.recipe) stashRecipeById(e.id, e.recipe);
+  }
+
   const items = entries
     .map((e) => {
       const title = e.recipe?.title?.trim() || t("recipeUntitled");
@@ -669,20 +709,32 @@ async function renderCataloguePage() {
 }
 
 async function renderRecipePage(recipeId) {
-  document.title = t("docTitleRecipe");
-  app.innerHTML = `
+  if (!recipeId) {
+    location.hash = "#/catalogue";
+    return;
+  }
+
+  /** Prefer memory / stash so "Save → recipe" works when GET hits another serverless instance. */
+  let recipe =
+    recipeId === lastConverterRecipeId && lastConverterRecipe
+      ? lastConverterRecipe
+      : getStashedRecipe(recipeId);
+
+  if (!recipe) {
+    document.title = t("docTitleRecipe");
+    app.innerHTML = `
     <main class="shell shell--recipe">
       ${renderMenuHeader()}
       <h1 class="recipe-page-title">${escapeHtml(t("recipePageMissing"))}</h1>
       <p class="hint converter-empty">${escapeHtml(t("catalogueLoading"))}</p>
     </main>
   `;
-
-  let recipe = null;
-  try {
-    recipe = recipeId ? await fetchRecipeById(recipeId) : null;
-  } catch (e) {
-    console.error(e);
+    try {
+      recipe = await fetchRecipeById(recipeId);
+      if (recipe) stashRecipeById(recipeId, recipe);
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   if (!recipe) {
@@ -783,10 +835,6 @@ function render() {
   } else if (route.name === "tech-health") {
     renderHealthCheckPage();
   } else if (route.name === "recipe") {
-    if (!route.recipeId) {
-      location.hash = "#/catalogue";
-      return;
-    }
     void renderRecipePage(route.recipeId);
   } else {
     renderHome();
@@ -812,6 +860,7 @@ app.addEventListener("click", (e) => {
   void (async () => {
     try {
       await deleteRecipeApi(id);
+      removeStashedRecipe(id);
       if (parseRoute().name === "catalogue") void renderCataloguePage();
     } catch (err) {
       console.error(err);
