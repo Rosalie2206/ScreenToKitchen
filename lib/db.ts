@@ -1,14 +1,35 @@
 /**
  * Local SQLite persistence for recipes (better-sqlite3, synchronous).
- * Database file: project root `recipes.db`, or RECIPES_DB_PATH override.
+ *
+ * - **Local dev:** `recipes.db` in the project root (writable).
+ * - **Serverless (Vercel, etc.):** the filesystem under `process.cwd()` is read-only,
+ *   so we default to `os.tmpdir()/screentokitchen-recipes.db` (writable). That storage
+ *   is ephemeral across cold starts—use `RECIPES_DB_PATH` or a hosted DB for durability.
+ * - **Override:** set `RECIPES_DB_PATH` to any writable file path.
  */
 import path from "node:path";
+import os from "node:os";
 import { randomUUID } from "node:crypto";
 import Database from "better-sqlite3";
 import type { Recipe } from "../types/recipe.js";
 
-const dbPath =
-  process.env.RECIPES_DB_PATH?.trim() || path.join(process.cwd(), "recipes.db");
+function resolveDbPath(): string {
+  const override = process.env.RECIPES_DB_PATH?.trim();
+  if (override) return override;
+
+  const onServerless =
+    Boolean(process.env.VERCEL) ||
+    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+    Boolean(process.env.NETLIFY);
+
+  if (onServerless) {
+    return path.join(os.tmpdir(), "screentokitchen-recipes.db");
+  }
+
+  return path.join(process.cwd(), "recipes.db");
+}
+
+const dbPath = resolveDbPath();
 
 let db: Database.Database | null = null;
 
